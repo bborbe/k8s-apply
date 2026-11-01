@@ -4,6 +4,14 @@ All notable changes to this project will be documented in this file.
 
 Please choose versions by [Semantic Versioning](http://semver.org/).
 
+## Unreleased
+
+- feat: generalise the apply service around a `Stage` so one instance deploys one named stage, deriving the make `BRANCH` argument, checkout guard and approval decision from it
+- feat: add the `sun` stage, which passes no `BRANCH` to make and refuses to apply unless the deploy checkout's HEAD contains `origin/master`
+- refactor: replace the `BRANCH` configuration and the `DevBranch` hard refusal with `STAGE` (`dev` or `sun`) and `ParseStage`, refusing an unknown stage instead of silently falling back
+- test: cover every stage's branch, topic prefix, master-HEAD guard and approval predicate, plus the `application.Stage` tags
+- refactor: derive the stage's branch-argument decision from ApplyBranch so a future stage passes BRANCH without editing the applier
+
 ## v0.9.0
 
 - feat: consume an `apply` command (schema `nuke-apply-v1`) from the branch-scoped CQRS request topic and run the named component's own `make BRANCH=dev apply` target, publishing one result per command

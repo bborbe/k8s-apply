@@ -13,28 +13,36 @@ import (
 )
 
 var _ = Describe("makeArgs", func() {
-	It("targets the component directory on the given branch", func() {
+	It("passes BRANCH for the dev stage", func() {
 		component := &Component{Path: "egress", Dir: "/repo/egress"}
 
-		Expect(makeArgs(component, "dev")).To(Equal([]string{
+		Expect(makeArgs(component, StageDev)).To(Equal([]string{
 			"-C", "/repo/egress", "BRANCH=dev", "apply",
+		}))
+	})
+
+	It("passes no BRANCH for the sun stage", func() {
+		component := &Component{Path: "agent", Dir: "/repo/agent"}
+
+		Expect(makeArgs(component, StageSun)).To(Equal([]string{
+			"-C", "/repo/agent", "apply",
 		}))
 	})
 })
 
 var _ = Describe("Applier", func() {
-	It("refuses to run on any branch but dev", func() {
-		applier := NewApplier("prod", log.DefaultSamplerFactory)
+	It("refuses an unknown stage", func() {
+		applier := NewApplier(Stage("bogus"), log.DefaultSamplerFactory)
 		component := &Component{Path: "egress", Dir: "/repo/egress"}
 
 		err := applier.Apply(context.Background(), component)
 
 		Expect(err).NotTo(BeNil())
-		Expect(err.Error()).To(ContainSubstring("only deploys 'dev'"))
+		Expect(err.Error()).To(ContainSubstring("unknown stage 'bogus'"))
 	})
 
 	It("reports a missing component directory as a failure rather than a success", func() {
-		applier := NewApplier(DevBranch, log.DefaultSamplerFactory)
+		applier := NewApplier(StageDev, log.DefaultSamplerFactory)
 		component := &Component{Path: "absent", Dir: "/does/not/exist"}
 
 		err := applier.Apply(context.Background(), component)
