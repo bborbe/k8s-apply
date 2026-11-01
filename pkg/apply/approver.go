@@ -53,7 +53,7 @@ func NewNoopApprover() Approver {
 type noopApprover struct{}
 
 func (noopApprover) Approve(ctx context.Context, stage Stage, _ Command) error {
-	if err := stage.Validate(ctx); err != nil {
+	if _, err := ParseStage(ctx, string(stage)); err != nil {
 		return err
 	}
 	if stage.RequiresApproval() {
@@ -108,7 +108,7 @@ type attentionItem struct {
 // Approve runs every binding check the approval-carrier decision names, in the
 // order that produces the most specific refusal first.
 func (a *AttentionStoreApprover) Approve(ctx context.Context, stage Stage, command Command) error {
-	if err := stage.Validate(ctx); err != nil {
+	if _, err := ParseStage(ctx, string(stage)); err != nil {
 		return err
 	}
 	if !stage.RequiresApproval() {

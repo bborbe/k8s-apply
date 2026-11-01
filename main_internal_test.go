@@ -35,11 +35,6 @@ func TestCreateApprover(t *testing.T) {
 			wantErr: "ATTENTION_URL is empty",
 		},
 		{
-			name:    "unknown stage is refused",
-			stage:   apply.Stage("staging"),
-			wantErr: "unknown stage",
-		},
-		{
 			name:  "prod with https is accepted",
 			stage: apply.StageProd,
 			url:   "https://attention.example.com",
@@ -59,9 +54,9 @@ func TestCreateApprover(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			app := &application{Stage: test.stage, AttentionURL: test.url}
+			app := &application{Stage: string(test.stage), AttentionURL: test.url}
 
-			approver, err := app.createApprover(ctx)
+			approver, err := app.createApprover(ctx, test.stage)
 
 			if test.wantErr != "" {
 				if err == nil {
@@ -87,11 +82,11 @@ func TestCreateApprover(t *testing.T) {
 // until the first real deploy.
 func TestCreateApproverNeverGivesProdTheNoop(t *testing.T) {
 	app := &application{
-		Stage:        apply.StageProd,
+		Stage:        string(apply.StageProd),
 		AttentionURL: "https://attention.example.com",
 	}
 
-	approver, err := app.createApprover(context.Background())
+	approver, err := app.createApprover(context.Background(), apply.StageProd)
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}

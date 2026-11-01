@@ -13,7 +13,7 @@ import (
 )
 
 var _ = Describe("makeArgs", func() {
-	It("targets the component directory on the dev branch", func() {
+	It("passes BRANCH for the dev stage", func() {
 		component := &Component{Path: "egress", Dir: "/repo/egress"}
 
 		Expect(makeArgs(component, StageDev)).To(Equal([]string{
@@ -23,8 +23,8 @@ var _ = Describe("makeArgs", func() {
 
 	// The prod make branch is "master", not "prod": nuke's Makefile.env maps
 	// both names onto prod.env, and every prod deploy is documented against
-	// "master". Passing "prod" here would deploy the right stage from the
-	// wrong branch name, which the deploy repo rejects.
+	// "master". Passing "prod" here would deploy the right stage from the wrong
+	// branch name, which the deploy repo rejects.
 	It("targets the prod branch as master", func() {
 		component := &Component{Path: "egress", Dir: "/repo/egress"}
 
@@ -33,26 +33,24 @@ var _ = Describe("makeArgs", func() {
 		}))
 	})
 
-	// A stage that gates inside its own recipes passes no BRANCH at all, so the
-	// invocation must not grow one for it.
-	It("passes no BRANCH for a stage that needs no branch argument", func() {
-		component := &Component{Path: "egress", Dir: "/repo/egress"}
+	It("passes no BRANCH for the sun stage", func() {
+		component := &Component{Path: "agent", Dir: "/repo/agent"}
 
-		Expect(makeArgs(component, Stage("guard-master"))).To(Equal([]string{
-			"-C", "/repo/egress", "apply",
+		Expect(makeArgs(component, StageSun)).To(Equal([]string{
+			"-C", "/repo/agent", "apply",
 		}))
 	})
 })
 
 var _ = Describe("Applier", func() {
-	It("refuses an unknown stage rather than defaulting to no branch argument", func() {
-		applier := NewApplier(Stage("staging"), log.DefaultSamplerFactory)
+	It("refuses an unknown stage", func() {
+		applier := NewApplier(Stage("bogus"), log.DefaultSamplerFactory)
 		component := &Component{Path: "egress", Dir: "/repo/egress"}
 
 		err := applier.Apply(context.Background(), component)
 
 		Expect(err).NotTo(BeNil())
-		Expect(err.Error()).To(ContainSubstring("unknown stage 'staging'"))
+		Expect(err.Error()).To(ContainSubstring("unknown stage 'bogus'"))
 	})
 
 	It("reports a missing component directory as a failure rather than a success", func() {

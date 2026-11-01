@@ -53,7 +53,7 @@ func CreateCommandConsumer(
 		syncProducer,
 		db,
 		apply.SchemaID,
-		base.TopicPrefixFromBranch(CQRSBranch(stage)),
+		base.TopicPrefixFromBranch(stage.Branch()),
 		false,
 		cdb.CommandObjectExecutorTxs{
 			command.NewCommandObjectExecutorApply(
