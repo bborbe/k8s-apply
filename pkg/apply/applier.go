@@ -24,8 +24,12 @@ type Applier interface {
 }
 
 // NewApplier returns an Applier that shells out to the component's own make
-// target. It never rewrites the recipe: whatever the component's Makefile says
-// `apply` does is what runs.
+// target for the given stage. It never rewrites the recipe: whatever the
+// component's Makefile says `apply` does is what runs.
+//
+// The stage, not a bare branch string, is the parameter: the branch handed to
+// make and the branch whose topics this instance consumes are different facts,
+// and only a stage knows both.
 func NewApplier(stage Stage, logSamplerFactory log.SamplerFactory) Applier {
 	return &applier{
 		stage:      stage,
@@ -40,6 +44,9 @@ type applier struct {
 
 // makeArgs is the exact argv the applier hands to make. It is a named function
 // so the invocation is assertable in a test without running make.
+//
+// A stage that gates by a precondition inside its own recipes passes no BRANCH
+// at all — passing one there would assert a gate that stage does not use.
 func makeArgs(component *Component, stage Stage) []string {
 	args := []string{"-C", component.Dir}
 	if stage.RequiresBranchArgument() {

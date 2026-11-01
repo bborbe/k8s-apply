@@ -21,6 +21,18 @@ var _ = Describe("makeArgs", func() {
 		}))
 	})
 
+	// The prod make branch is "master", not "prod": nuke's Makefile.env maps
+	// both names onto prod.env, and every prod deploy is documented against
+	// "master". Passing "prod" here would deploy the right stage from the wrong
+	// branch name, which the deploy repo rejects.
+	It("targets the prod branch as master", func() {
+		component := &Component{Path: "egress", Dir: "/repo/egress"}
+
+		Expect(makeArgs(component, StageProd)).To(Equal([]string{
+			"-C", "/repo/egress", "BRANCH=master", "apply",
+		}))
+	})
+
 	It("passes no BRANCH for the sun stage", func() {
 		component := &Component{Path: "agent", Dir: "/repo/agent"}
 

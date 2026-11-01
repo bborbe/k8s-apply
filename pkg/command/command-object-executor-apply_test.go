@@ -6,6 +6,7 @@ package command_test
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/bborbe/cqrs/base"
 	"github.com/bborbe/cqrs/cdb"
@@ -24,15 +25,22 @@ var _ = Describe("CommandObjectExecutorApply", func() {
 	var ctx context.Context
 	var componentResolver *mocks.ComponentResolver
 	var applier *mocks.Applier
+	var approver *mocks.Approver
+	var revision *mocks.Revision
 	var executor cdb.CommandObjectExecutorTx
 
 	BeforeEach(func() {
 		ctx = context.Background()
 		componentResolver = &mocks.ComponentResolver{}
 		applier = &mocks.Applier{}
+		approver = &mocks.Approver{}
+		revision = &mocks.Revision{}
 		executor = command.NewCommandObjectExecutorApply(
+			apply.StageDev,
 			componentResolver,
 			applier,
+			approver,
+			revision,
 			log.DefaultSamplerFactory,
 		)
 	})
@@ -72,6 +80,112 @@ var _ = Describe("CommandObjectExecutorApply", func() {
 		Expect(resolvedPath).To(Equal("trading/core/symbol"))
 		_, appliedComponent := applier.ApplyArgsForCall(0)
 		Expect(appliedComponent).To(Equal(component))
+	})
+
+	// The whole point of the prod gate is that a refused command never reaches
+	// the filesystem, let alone a shell. Asserting only "an error came back"
+	// would pass for a service that resolved, resolved-and-failed, or applied
+	// and then reported a failure.
+	It("consults the approver before resolving, and applies nothing when it refuses", func() {
+		approver.ApproveReturns(errors.Errorf(ctx, "no approval carried"))
+
+		_, _, err := executor.HandleCommand(
+			ctx,
+			nil,
+			commandObject(base.Event{"path": "trading/core/symbol"}),
+		)
+
+		Expect(err).NotTo(BeNil())
+		Expect(err.Error()).To(ContainSubstring("no approval carried"))
+		Expect(approver.ApproveCallCount()).To(Equal(1))
+		Expect(componentResolver.ResolveCallCount()).To(Equal(0))
+		Expect(applier.ApplyCallCount()).To(Equal(0))
+	})
+
+	It("passes the stage and the command's path to the approver", func() {
+		componentResolver.ResolveReturns(&apply.Component{Path: "alertmanager"}, nil)
+
+		_, _, err := executor.HandleCommand(
+			ctx,
+			nil,
+			commandObject(base.Event{"path": "alertmanager"}),
+		)
+		Expect(err).To(BeNil())
+
+		_, stage, approved := approver.ApproveArgsForCall(0)
+		Expect(stage).To(Equal(apply.StageDev))
+		Expect(approved.Path).To(Equal("alertmanager"))
+	})
+
+	// Fail-closed wiring: a prod deployment that forgot to configure an
+	// approver must refuse every apply, not silently skip the gate.
+	It("refuses a prod apply when only the noop approver is wired", func() {
+		prodExecutor := command.NewCommandObjectExecutorApply(
+			apply.StageProd,
+			componentResolver,
+			applier,
+			apply.NewNoopApprover(),
+			revision,
+			log.DefaultSamplerFactory,
+		)
+
+		_, _, err := prodExecutor.HandleCommand(
+			ctx,
+			nil,
+			commandObject(base.Event{"path": "alertmanager"}),
+		)
+
+		Expect(err).NotTo(BeNil())
+		Expect(err.Error()).To(ContainSubstring("no approver is configured"))
+		Expect(applier.ApplyCallCount()).To(Equal(0))
+	})
+
+	// The approval names a commit; make runs against whatever the pod cloned.
+	// Without this check the binding is paperwork — the hash can say commit A
+	// while the checkout sits at commit B.
+	It("refuses when the checkout is not the approved commit", func() {
+		approver.ApproveReturns(nil)
+		revision.VerifyReturns(errors.Errorf(ctx, "checkout is at b, the approval covers a"))
+
+		prodExecutor := command.NewCommandObjectExecutorApply(
+			apply.StageProd,
+			componentResolver,
+			applier,
+			approver,
+			revision,
+			log.DefaultSamplerFactory,
+		)
+		raw, err := json.Marshal(map[string]any{
+			"id":            "abc",
+			"component":     "alertmanager",
+			"commit":        "aaa",
+			"action_sha256": apply.ActionHash(apply.StageProd, "alertmanager", "aaa"),
+		})
+		Expect(err).To(BeNil())
+
+		_, _, err = prodExecutor.HandleCommand(
+			ctx,
+			nil,
+			commandObject(base.Event{"path": "alertmanager", "approval": json.RawMessage(raw)}),
+		)
+
+		Expect(err).NotTo(BeNil())
+		Expect(err.Error()).To(ContainSubstring("checkout is at b"))
+		Expect(revision.VerifyCallCount()).To(Equal(1))
+		Expect(componentResolver.ResolveCallCount()).To(Equal(0))
+		Expect(applier.ApplyCallCount()).To(Equal(0))
+	})
+
+	It("does not consult the revision on a stage that needs no approval", func() {
+		componentResolver.ResolveReturns(&apply.Component{Path: "alertmanager"}, nil)
+
+		_, _, err := executor.HandleCommand(
+			ctx,
+			nil,
+			commandObject(base.Event{"path": "alertmanager"}),
+		)
+		Expect(err).To(BeNil())
+		Expect(revision.VerifyCallCount()).To(Equal(0))
 	})
 
 	It("fails without resolving when the command carries no path", func() {

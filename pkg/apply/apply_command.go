@@ -6,6 +6,7 @@ package apply
 
 import (
 	"context"
+	"encoding/json"
 	"path"
 	"strings"
 
@@ -17,6 +18,16 @@ import (
 // to the repo root — for example "egress-proxy" or "trading/core/symbol".
 type Command struct {
 	Path string `json:"path"`
+	// Approval is the operator approval this command carries. It is left raw
+	// rather than typed so that a payload carrying a *list* of approvals is
+	// refused by name ("more than one approval carried") instead of failing as
+	// a generic unmarshal error that names no cause. ParseApproval reads it.
+	//
+	// Absent on stages that need none, and on a stage that requires one it is
+	// what the Approver refuses — never something Validate rejects, because a
+	// missing approval is a policy refusal with a reason, not a malformed
+	// command.
+	Approval json.RawMessage `json:"approval,omitempty"`
 }
 
 // Validate rejects a command whose path could escape the repo root or is

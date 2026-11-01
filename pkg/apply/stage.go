@@ -21,14 +21,23 @@ const (
 	StageDev Stage = "dev"
 	// StageSun deploys the single-stage sun cluster from master.
 	StageSun Stage = "sun"
+	// StageProd deploys the nuke prod cluster from the master branch.
+	StageProd Stage = "prod"
 )
 
 // ApplyBranch is the branch passed to make as BRANCH. An empty string means
 // the stage passes no BRANCH argument at all.
+//
+// Prod's branch is "master", not "prod": nuke's Makefile.env maps both names
+// onto prod.env, and every prod deploy is documented against "master". Passing
+// "prod" would deploy the right stage from a branch name the deploy repo does
+// not know.
 func (s Stage) ApplyBranch() string {
 	switch s {
 	case StageDev:
 		return "dev"
+	case StageProd:
+		return "master"
 	case StageSun:
 		return ""
 	default:
@@ -44,14 +53,20 @@ func (s Stage) RequiresBranchArgument() bool {
 }
 
 // RequiresApproval reports whether the stage gates on a recorded operator
-// approval. Neither stage defined here does; the prod stage added by a sibling
-// branch returns true.
+// approval.
+//
+// Only prod does, because prod is the stage where a wrong apply is not
+// recoverable by re-applying. Dev and sun promote on their own.
 func (s Stage) RequiresApproval() bool {
-	return false
+	return s == StageProd
 }
 
 // Branch is the CQRS topic branch this instance consumes. TopicPrefixFromBranch
-// maps dev to "develop" and passes sun through as "sun".
+// maps dev to "develop", prod to "master", and passes sun through as "sun".
+//
+// It is deliberately NOT ApplyBranch: on prod those are "prod" and "master".
+// Both yield the prefix "master" today, which is exactly why collapsing them
+// into one value would stay hidden until either changed.
 func (s Stage) Branch() base.Branch {
 	return base.Branch(s)
 }
@@ -73,7 +88,13 @@ func ParseStage(ctx context.Context, name string) (Stage, error) {
 		return StageDev, nil
 	case string(StageSun):
 		return StageSun, nil
+	case string(StageProd):
+		return StageProd, nil
 	default:
-		return "", errors.Errorf(ctx, "unknown stage '%s': accepted are 'dev', 'sun'", name)
+		return "", errors.Errorf(
+			ctx,
+			"unknown stage '%s': accepted are 'dev', 'sun', 'prod'",
+			name,
+		)
 	}
 }
