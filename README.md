@@ -108,6 +108,16 @@ Configuration is managed through environment variables. See `example.env` for de
 | `SENTRY_PROXY` | Sentry proxy URL | (optional) |
 | `DATADIR` | Database storage directory | (required) |
 | `BATCH_SIZE` | Kafka batch consume size | `1` |
+| `BRANCH` | Branch whose apply commands this instance consumes | `dev` |
+| `NUKE_REPO_DIR` | Path to the `bborbe/nuke` checkout the apply targets run in | `/repo` |
+| `TEAMVAULT_URL` | TeamVault base URL, passed through to `teamvault-cli` | (from Secret) |
+| `TEAMVAULT_USER` | TeamVault user for this stage | (from Secret) |
+| `TEAMVAULT_PASS` | TeamVault password for this stage | (from Secret) |
+
+`teamvault-cli` takes `TEAMVAULT_URL` / `TEAMVAULT_USER` / `TEAMVAULT_PASS` as the defaults for its
+`--teamvault-*` flags, so the component Makefiles stay untouched. The image deliberately ships **no**
+`~/.config/teamvault-cli/config.json`: when that file exists its values overwrite the environment,
+which would silently defeat per-stage credentials.
 
 ### Build/Deployment Configuration
 
@@ -124,12 +134,14 @@ Configuration is managed through environment variables. See `example.env` for de
 
 ### Kubernetes
 
-The `k8s/` directory contains complete Kubernetes manifests:
+The `k8s/` directory contains the manifests for one Deployment:
 
-- Choose between Deployment (`nuke-apply-deploy.yaml`) or StatefulSet (`nuke-apply-sts.yaml`)
-- Service, Ingress, Secret, and User configurations included
-- **To activate**: Change replicas from 0 → 1
-- **For Deployment**: Delete StatefulSet manifest if using Deployment
+- `nuke-apply-deploy.yaml` — the service, its `nuke-apply` service account, an init container that
+  shallow-clones `bborbe/nuke` at the dev branch into an `emptyDir`, and the TeamVault credentials
+- Service, Ingress, Secret, and KafkaUser configurations included
+- **To activate**: change replicas from 0 → 1
+- Requires two Secrets provisioned out of band: `nuke-apply-git` (deploy key for the nuke repo) and
+  `nuke-apply-teamvault` (keys `url`, `user`, `pass`)
 
 ### Docker
 
@@ -137,12 +149,35 @@ Multi-stage Docker build included. See `Dockerfile` and `Makefile.docker`.
 
 ## Architecture
 
-Standard Go microservice architecture:
+A CQRS consumer with the standard bborbe service shell around it:
 
-- `main.go` - Application entry point with dependency injection
-- `pkg/factory/` - Factory functions for handler creation
-- `pkg/handler/` - HTTP handlers for various endpoints
-- Uses proven libraries for service framework, HTTP handling, Kafka, database, and monitoring
+- `main.go` — entry point; wires the Kafka client provider, producer, BoltDB and both run funcs
+- `pkg/factory/` — `CreateCommandConsumer` wires the schema, the topic prefix and the executors
+- `pkg/command/` — the `apply` executor: unmarshals the command, resolves the component, runs it
+- `pkg/apply/` — the command payload, the component resolver, the docker refusal and the applier
+- `pkg/handler/` — HTTP handlers for health, metrics and log level
+
+### The apply command
+
+The service consumes schema `nuke-apply-v1` (group `nuke`, kind `apply`, version `v1`) on the topic
+`develop-nuke-apply-v1-request` and publishes one result per command to `develop-nuke-apply-v1-result`.
+
+```
+POST /api/1.0/command/nuke-apply-v1/apply
+{"path": "alert-controller"}
+```
+
+`path` is a component directory relative to the repo root. The service then runs exactly that
+component's own target — `make -C <repo>/<path> BRANCH=dev apply` — and never rewrites it.
+
+Two refusals are by design and both publish a **Failure** result naming the reason:
+
+- a component whose `apply` recipe invokes `docker` (there is no docker daemon in the pod, and an
+  image build belongs to the release pipeline)
+- a component with no `apply` target at all
+
+Only `BRANCH=dev` is accepted. The applier refuses any other branch, so a mis-set environment
+fails loudly instead of deploying somewhere unexpected.
 
 ## API Documentation
 

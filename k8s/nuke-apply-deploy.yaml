@@ -30,6 +30,11 @@ spec:
       labels:
         app: nuke-apply
     spec:
+      # The apply target runs kubectl against the cluster this pod lives in, so
+      # the pod authenticates as a service account rather than through a
+      # kubeconfig. nuke-apply-user.yaml / the RBAC in this directory bound what
+      # that account may touch.
+      serviceAccountName: nuke-apply
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -39,6 +44,28 @@ spec:
                     operator: In
                     values:
                       - 'agent'
+      initContainers:
+        # One shallow clone of the deploy repo at the dev branch per pod start.
+        # The key is read-only and mounted at 0400; StrictHostKeyChecking is
+        # accept-new because the image carries no known_hosts.
+        - name: clone
+          image: '{{"DOCKER_REGISTRY" | env}}/nuke-apply:{{"BRANCH" | env}}'
+          imagePullPolicy: Always
+          command:
+            - /bin/sh
+            - -c
+          args:
+            - |
+              set -eu
+              install -m 0400 /git-key/id_ed25519 /tmp/id_ed25519
+              export GIT_SSH_COMMAND="ssh -i /tmp/id_ed25519 -o StrictHostKeyChecking=accept-new"
+              git clone --depth 1 --branch dev git@github.com:bborbe/nuke.git /repo
+          volumeMounts:
+            - mountPath: /repo
+              name: repo
+            - mountPath: /git-key
+              name: git-key
+              readOnly: true
       containers:
         - name: service
           args:
@@ -46,6 +73,29 @@ spec:
           env:
             - name: LISTEN
               value: ':9090'
+            - name: BRANCH
+              value: dev
+            - name: NUKE_REPO_DIR
+              value: /repo
+            # teamvault-cli reads TEAMVAULT_URL / TEAMVAULT_USER / TEAMVAULT_PASS
+            # as the defaults for its --teamvault-* flags, so the Makefiles stay
+            # untouched and no wrapper is needed on PATH. The image ships no
+            # config file: one would overwrite these values.
+            - name: TEAMVAULT_URL
+              valueFrom:
+                secretKeyRef:
+                  key: url
+                  name: nuke-apply-teamvault
+            - name: TEAMVAULT_USER
+              valueFrom:
+                secretKeyRef:
+                  key: user
+                  name: nuke-apply-teamvault
+            - name: TEAMVAULT_PASS
+              valueFrom:
+                secretKeyRef:
+                  key: pass
+                  name: nuke-apply-teamvault
             - name: SENTRY_DSN
               valueFrom:
                 secretKeyRef:
@@ -80,16 +130,27 @@ spec:
             timeoutSeconds: 5
           resources:
             limits:
-              cpu: 200m
-              memory: 50Mi
+              cpu: 500m
+              memory: 512Mi
             requests:
               cpu: 20m
-              memory: 20Mi
+              memory: 64Mi
           volumeMounts:
             - mountPath: /data
               name: datadir
+            - mountPath: /repo
+              name: repo
+              readOnly: true
       imagePullSecrets:
         - name: docker-quant
       volumes:
         - name: datadir
           emptyDir: { }
+        - name: repo
+          emptyDir: { }
+        # Deploy key for git@github.com:bborbe/nuke.git. Provisioned out of band
+        # (see the task's per-stage TeamVault entry list); the pod only reads it.
+        - name: git-key
+          secret:
+            secretName: nuke-apply-git
+            defaultMode: 0400
