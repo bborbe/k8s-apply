@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 Please choose versions by [Semantic Versioning](http://semver.org/).
 
-## Unreleased
+## v0.10.0
 
 - feat: generalise the apply service around a `Stage` so one instance deploys one named stage, deriving the make `BRANCH` argument, checkout guard and approval decision from it
 - feat: add the `sun` stage, which passes no `BRANCH` to make and refuses to apply unless the deploy checkout's HEAD contains `origin/master`
