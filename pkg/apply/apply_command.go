@@ -22,23 +22,30 @@ type Command struct {
 // Validate rejects a command whose path could escape the repo root or is
 // otherwise unusable. It deliberately does not touch the filesystem: an
 // unknown component is a resolve failure, not a malformed command.
+//
+// Every check is on the value that is later used, never on a normalized copy:
+// a path this accepts is joined verbatim against the repo root by the resolver,
+// so " egress " is rejected here rather than accepted and then looked up under
+// a different name.
 func (c Command) Validate(ctx context.Context) error {
-	cleaned := strings.TrimSpace(c.Path)
-	if cleaned == "" {
+	if c.Path == "" {
 		return errors.Errorf(ctx, "path missing")
 	}
-	if strings.HasPrefix(cleaned, "/") {
-		return errors.Errorf(ctx, "path '%s' must be relative to the repo root", cleaned)
+	if strings.TrimSpace(c.Path) != c.Path {
+		return errors.Errorf(ctx, "path '%s' has leading or trailing whitespace", c.Path)
 	}
-	if path.Clean(cleaned) != cleaned {
-		return errors.Errorf(ctx, "path '%s' is not a clean relative path", cleaned)
+	if strings.HasPrefix(c.Path, "/") {
+		return errors.Errorf(ctx, "path '%s' must be relative to the repo root", c.Path)
 	}
-	for _, part := range strings.Split(cleaned, "/") {
+	if path.Clean(c.Path) != c.Path {
+		return errors.Errorf(ctx, "path '%s' is not a clean relative path", c.Path)
+	}
+	for _, part := range strings.Split(c.Path, "/") {
 		if part == ".." {
-			return errors.Errorf(ctx, "path '%s' must not escape the repo root", cleaned)
+			return errors.Errorf(ctx, "path '%s' must not escape the repo root", c.Path)
 		}
 		if part == "." {
-			return errors.Errorf(ctx, "path '%s' does not name a component", cleaned)
+			return errors.Errorf(ctx, "path '%s' does not name a component", c.Path)
 		}
 	}
 	return nil

@@ -136,8 +136,13 @@ which would silently defeat per-stage credentials.
 
 The `k8s/` directory contains the manifests for one Deployment:
 
-- `nuke-apply-deploy.yaml` — the service, its `nuke-apply` service account, an init container that
-  shallow-clones `bborbe/nuke` at the dev branch into an `emptyDir`, and the TeamVault credentials
+- `nuke-apply-deploy.yaml` — the service, an init container that shallow-clones `bborbe/nuke` at the
+  dev branch into an `emptyDir`, and the TeamVault credentials
+- `nuke-apply-rbac.yaml` — the `nuke-apply` ServiceAccount, a namespaced Role for the namespaced
+  kinds the apply targets touch, and a narrow ClusterRole for the cluster-scoped kinds some
+  components ship. Without these the pod cannot start and every apply would be Forbidden.
+- `nuke-apply-known-hosts.yaml` — github.com's published SSH host keys, so the clone verifies the
+  host rather than trusting it on first contact
 - Service, Ingress, Secret, and KafkaUser configurations included
 - **To activate**: change replicas from 0 → 1
 - Requires two Secrets provisioned out of band: `nuke-apply-git` (deploy key for the nuke repo) and

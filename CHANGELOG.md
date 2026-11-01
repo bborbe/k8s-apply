@@ -6,19 +6,22 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
-## v0.8.0
-
-- feat: add `pkg/textwrap` with dependency-free word wrapping (`Wrap`, `WrapString`), line indentation (`Indent`, `IndentLines`), and `Dedent` helpers
-- docs: correct the README Go requirement from 1.25+ to 1.27+ — `go.mod` and the `Dockerfile` have been on `1.27.1` since the Go 1.27 bump, so the stated minimum was stale
-
-## v0.7.0
-
 - feat: consume an `apply` command (schema `nuke-apply-v1`) from the branch-scoped CQRS request topic and run the named component's own `make BRANCH=dev apply` target, publishing one result per command
 - feat: refuse a component whose apply recipe invokes `docker`, and one with no apply target, with a Failure result naming the reason
 - feat: add `pkg/apply` (command payload, component resolver, applier) and `pkg/command` (the executor), with counterfeiter fakes
 - feat: build the runtime image on alpine instead of scratch so it carries `git`, `make`, `bash`, `kubectl` and `teamvault-cli`, and pin kubectl to the nuke cluster's server version
-- feat: wire `BRANCH`, `NUKE_REPO_DIR` and the `TEAMVAULT_*` variables into the deployment, add the `nuke-apply` service account, and clone the deploy repo in an init container
+- feat: wire `BRANCH`, `NUKE_REPO_DIR` and the `TEAMVAULT_*` variables into the deployment and clone the deploy repo in an init container
+- feat: add `k8s/nuke-apply-rbac.yaml` — the `nuke-apply` ServiceAccount with a namespaced Role plus a narrow ClusterRole for the cluster-scoped kinds some components ship, so the pod can start and its kubectl calls are not Forbidden
+- security: pin the kubectl download to a recorded SHA-256 instead of trusting a checksum fetched from the same origin, and run the service as non-root with no privilege escalation
+- security: pin github.com's SSH host keys from `api.github.com/meta` and clone with `StrictHostKeyChecking=yes`, so the repo whose Makefiles run with this pod's credentials is verified rather than trusted on first contact
+- fix: reject a command path with leading or trailing whitespace instead of validating a trimmed copy and then resolving the original
 - chore: drop the duplicate StatefulSet manifest — the Deployment is the only shape this service ships
+- chore: bump golangci-lint to v2.14.0 — v2.13.1 cannot decode Go 1.27.3 export data and failed the lint gate in CI
+
+## v0.8.0
+
+- feat: add `pkg/textwrap` with dependency-free word wrapping (`Wrap`, `WrapString`), line indentation (`Indent`, `IndentLines`), and `Dedent` helpers
+- docs: correct the README Go requirement from 1.25+ to 1.27+ — `go.mod` and the `Dockerfile` have been on `1.27.1` since the Go 1.27 bump, so the stated minimum was stale
 
 ## v0.6.0
 

@@ -11,12 +11,12 @@ import (
 
 var _ = Describe("extractRecipe", func() {
 	It("returns nil when the target is missing", func() {
-		Expect(extractRecipe("install:\n\tkubectl apply -f x.yaml\n", "apply")).To(BeNil())
+		Expect(extractRecipe("install:\n\tkubectl apply -f x.yaml\n")).To(BeNil())
 	})
 
 	It("returns the recipe lines of the target", func() {
 		content := "apply:\n\tkubectl apply -f a.yaml\n\tkubectl apply -f b.yaml\n"
-		Expect(extractRecipe(content, "apply")).To(Equal([]string{
+		Expect(extractRecipe(content)).To(Equal([]string{
 			"kubectl apply -f a.yaml",
 			"kubectl apply -f b.yaml",
 		}))
@@ -24,19 +24,19 @@ var _ = Describe("extractRecipe", func() {
 
 	It("stops at the first non-recipe line", func() {
 		content := "apply:\n\tkubectl apply -f a.yaml\n\nother:\n\tdocker build .\n"
-		Expect(extractRecipe(content, "apply")).To(Equal([]string{"kubectl apply -f a.yaml"}))
+		Expect(extractRecipe(content)).To(Equal([]string{"kubectl apply -f a.yaml"}))
 	})
 
 	It("joins backslash continuations into one logical line", func() {
 		content := "apply:\n\tteamvault-cli config parse \\\n\t\t--file x --out y\n"
-		Expect(extractRecipe(content, "apply")).To(Equal([]string{
+		Expect(extractRecipe(content)).To(Equal([]string{
 			"teamvault-cli config parse  \t--file x --out y",
 		}))
 	})
 
 	It("does not match a target whose name merely starts with the target", func() {
 		content := "apply-all:\n\tdocker build .\n"
-		Expect(extractRecipe(content, "apply")).To(BeNil())
+		Expect(extractRecipe(content)).To(BeNil())
 	})
 })
 

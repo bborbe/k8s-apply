@@ -25,7 +25,7 @@ var _ = Describe("Command", func() {
 		},
 		Entry("simple component", "egress-proxy", true),
 		Entry("nested component", "trading/core/symbol", true),
-		Entry("leading and trailing space is trimmed", " egress-proxy ", true),
+		Entry("leading and trailing space is rejected, not trimmed", " egress-proxy ", false),
 		Entry("empty path", "", false),
 		Entry("whitespace only", "   ", false),
 		Entry("absolute path", "/etc/passwd", false),

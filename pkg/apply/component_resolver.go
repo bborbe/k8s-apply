@@ -67,7 +67,7 @@ func (c *componentResolver) Resolve(ctx context.Context, path string) (*Componen
 	if err != nil {
 		return nil, errors.Wrapf(ctx, err, "component '%s' has no Makefile", path)
 	}
-	recipe := extractRecipe(string(content), applyTarget)
+	recipe := extractRecipe(string(content))
 	if len(recipe) == 0 {
 		return nil, errors.Wrapf(ctx, ErrNotApplicable, "component '%s'", path)
 	}

@@ -29,7 +29,14 @@ FROM alpine:3.24
 # kubectl is pinned to the nuke cluster's server version (measured 2026-11-01:
 # nuke-dev runs v1.36.4+k3s1) rather than taken from a distro package, so the
 # client the apply target invokes cannot drift with an apk index refresh.
+#
+# The checksum is pinned HERE, not fetched alongside the binary: a value read
+# from the same origin as the artifact it verifies proves only that the two
+# agree, and a compromised mirror or DNS path can supply both. The digest below
+# was recorded by hashing the v1.36.4 linux/amd64 binary and comparing it to the
+# published .sha256 on 2026-11-01.
 ARG KUBECTL_VERSION=v1.36.4
+ARG KUBECTL_SHA256=8b8f088da2dab964f853b38464033b1be15ede2839eca751482357c45abdd05a
 
 RUN apk --no-cache add \
         bash \
@@ -39,9 +46,11 @@ RUN apk --no-cache add \
         openssh-client \
         tzdata \
         wget \
- && wget -q -O /usr/local/bin/kubectl \
+ && wget -q -O /tmp/kubectl \
         "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
- && chmod 0755 /usr/local/bin/kubectl \
+ && echo "${KUBECTL_SHA256}  /tmp/kubectl" | sha256sum -c - \
+ && install -m 0755 /tmp/kubectl /usr/local/bin/kubectl \
+ && rm -f /tmp/kubectl \
  && apk --no-cache del wget
 
 ARG BUILD_GIT_VERSION=dev
@@ -65,6 +74,16 @@ COPY --from=build /usr/local/bin/teamvault-cli /usr/local/bin/teamvault-cli
 # reads $TEAMVAULT_CONFIG (else ~/.config/teamvault-cli/config.json) and, when
 # that file exists, its url/user/pass OVERWRITE the env vars — so shipping one
 # would silently win over the per-stage credentials injected at runtime.
+
+# Non-root: the service runs component Makefiles that hold the pod's service
+# account token and the TEAMVAULT_* credentials, so a recipe that misbehaves
+# should not also be root. The uid is fixed and matched by the pod's
+# securityContext, and fsGroup makes the emptyDir volumes writable for it.
+RUN addgroup -g 10001 -S app \
+ && adduser -u 10001 -S -G app -h /home/app app \
+ && mkdir -p /data /repo \
+ && chown 10001:10001 /data /repo
+USER 10001:10001
 
 ENV BUILD_GIT_VERSION=${BUILD_GIT_VERSION}
 ENV BUILD_GIT_COMMIT=${BUILD_GIT_COMMIT}

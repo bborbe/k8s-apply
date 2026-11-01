@@ -32,9 +32,20 @@ spec:
     spec:
       # The apply target runs kubectl against the cluster this pod lives in, so
       # the pod authenticates as a service account rather than through a
-      # kubeconfig. nuke-apply-user.yaml / the RBAC in this directory bound what
-      # that account may touch.
+      # kubeconfig. nuke-apply-rbac.yaml creates the account and bounds what it
+      # may touch — a namespaced Role for the namespaced kinds, plus a narrow
+      # ClusterRole for the cluster-scoped kinds some components ship.
+      # (nuke-apply-user.yaml is unrelated: it is the Strimzi KafkaUser this
+      # service authenticates to Kafka with.)
       serviceAccountName: nuke-apply
+      # Matches the image's non-root user. fsGroup makes the emptyDir volumes
+      # group-writable so both the clone init container and the service can use
+      # them without running as root.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        fsGroup: 10001
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -46,8 +57,11 @@ spec:
                       - 'agent'
       initContainers:
         # One shallow clone of the deploy repo at the dev branch per pod start.
-        # The key is read-only and mounted at 0400; StrictHostKeyChecking is
-        # accept-new because the image carries no known_hosts.
+        # The key is read-only and mounted at 0400. The host key is pinned from
+        # nuke-apply-known-hosts.yaml and checked strictly: whatever repo is
+        # cloned has its Makefiles run with this pod's credentials, so trusting
+        # an unverified host key would hand those credentials to whoever won the
+        # first handshake.
         - name: clone
           image: '{{"DOCKER_REGISTRY" | env}}/nuke-apply:{{"BRANCH" | env}}'
           imagePullPolicy: Always
@@ -58,7 +72,9 @@ spec:
             - |
               set -eu
               install -m 0400 /git-key/id_ed25519 /tmp/id_ed25519
-              export GIT_SSH_COMMAND="ssh -i /tmp/id_ed25519 -o StrictHostKeyChecking=accept-new"
+              export GIT_SSH_COMMAND="ssh -i /tmp/id_ed25519 \
+                -o StrictHostKeyChecking=yes \
+                -o UserKnownHostsFile=/known-hosts/known_hosts"
               git clone --depth 1 --branch dev git@github.com:bborbe/nuke.git /repo
           volumeMounts:
             - mountPath: /repo
@@ -66,8 +82,15 @@ spec:
             - mountPath: /git-key
               name: git-key
               readOnly: true
+            - mountPath: /known-hosts
+              name: known-hosts
+              readOnly: true
       containers:
         - name: service
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
           args:
             - -v={{"LOGLEVEL" | env}}
           env:
@@ -154,3 +177,6 @@ spec:
           secret:
             secretName: nuke-apply-git
             defaultMode: 0400
+        - name: known-hosts
+          configMap:
+            name: nuke-apply-known-hosts

@@ -40,6 +40,12 @@ type applier struct {
 	logSampler log.Sampler
 }
 
+// makeArgs is the exact argv the applier hands to make. It is a named function
+// so the invocation is assertable in a test without running make.
+func makeArgs(component *Component, branch string) []string {
+	return []string{"-C", component.Dir, "BRANCH=" + branch, applyTarget}
+}
+
 func (a *applier) Apply(ctx context.Context, component *Component) error {
 	if a.branch != DevBranch {
 		return errors.Errorf(
@@ -49,7 +55,7 @@ func (a *applier) Apply(ctx context.Context, component *Component) error {
 			DevBranch,
 		)
 	}
-	args := []string{"-C", component.Dir, "BRANCH=" + a.branch, applyTarget}
+	args := makeArgs(component, a.branch)
 	// #nosec G204 -- the component path was validated by the resolver and make
 	// is the documented entry point of every component in the deploy repo.
 	cmd := exec.CommandContext(ctx, "make", args...)

@@ -21,15 +21,15 @@ const recipeLinePrefix = "\t"
 // is not refused.
 var dockerInvocation = regexp.MustCompile(`(^|[\s;&|(])docker(\s|$)`)
 
-// extractRecipe returns the recipe lines of the named make target, with
-// backslash continuations joined into one logical line per entry. It returns
-// nil when the target is not defined, which callers must treat as "this
-// component cannot be applied" rather than "empty recipe".
-func extractRecipe(content string, target string) []string {
+// extractRecipe returns the recipe lines of the apply target, with backslash
+// continuations joined into one logical line per entry. It returns nil when the
+// target is not defined, which callers must treat as "this component cannot be
+// applied" rather than "empty recipe".
+func extractRecipe(content string) []string {
 	lines := strings.Split(content, "\n")
 	start := -1
 	for i, line := range lines {
-		if !strings.HasPrefix(line, target+":") {
+		if !strings.HasPrefix(line, applyTarget+":") {
 			continue
 		}
 		start = i + 1
