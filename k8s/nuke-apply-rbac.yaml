@@ -1,0 +1,111 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nuke-apply
+  namespace: '{{ "NAMESPACE" | env }}'
+---
+# Namespaced deploy rights. This is what the component apply targets use for the
+# overwhelming majority of the repo: they render manifests with
+# `teamvault-cli config parse` and pipe them to `kubectl apply` in their own
+# namespace.
+#
+# Deliberately NOT cluster-admin: the Role is bound in this namespace only, so
+# `auth can-i patch deployments.apps -n <other-ns>` answers no. Anything the
+# apply targets need beyond this list fails as a Forbidden in the command's
+# Failure result, which is visible, rather than being granted in advance.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: nuke-apply
+  namespace: '{{ "NAMESPACE" | env }}'
+rules:
+  - apiGroups: [""]
+    resources:
+      - configmaps
+      - endpoints
+      - persistentvolumeclaims
+      - pods
+      - secrets
+      - serviceaccounts
+      - services
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["apps"]
+    resources:
+      - daemonsets
+      - deployments
+      - replicasets
+      - statefulsets
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["batch"]
+    resources:
+      - cronjobs
+      - jobs
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["networking.k8s.io"]
+    resources:
+      - ingresses
+      - networkpolicies
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["autoscaling"]
+    resources:
+      - horizontalpodautoscalers
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["policy"]
+    resources:
+      - poddisruptionbudgets
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources:
+      - roles
+      - rolebindings
+    verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: nuke-apply
+  namespace: '{{ "NAMESPACE" | env }}'
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: nuke-apply
+subjects:
+  - kind: ServiceAccount
+    name: nuke-apply
+    namespace: '{{ "NAMESPACE" | env }}'
+---
+# Cluster-scoped kinds some components genuinely apply (alert-controller ships a
+# ClusterRole and a ClusterRoleBinding; several components ship a CRD). Scoped to
+# those kinds and to create/update/patch only — no delete, and no wildcard
+# resources, so this cannot be escalated into a general cluster-admin grant.
+#
+# A component that needs a cluster-scoped kind NOT listed here fails with a
+# Forbidden in its Failure result. Add the kind deliberately when that happens
+# rather than widening to '*'.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: '{{ "NAMESPACE" | env }}-nuke-apply'
+rules:
+  - apiGroups: ["rbac.authorization.k8s.io"]
+    resources:
+      - clusterroles
+      - clusterrolebindings
+    verbs: ["get", "list", "create", "update", "patch"]
+  - apiGroups: ["apiextensions.k8s.io"]
+    resources:
+      - customresourcedefinitions
+    verbs: ["get", "list", "create", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: '{{ "NAMESPACE" | env }}-nuke-apply'
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: '{{ "NAMESPACE" | env }}-nuke-apply'
+subjects:
+  - kind: ServiceAccount
+    name: nuke-apply
+    namespace: '{{ "NAMESPACE" | env }}'

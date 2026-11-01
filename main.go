@@ -10,6 +10,7 @@ import (
 	"time"
 
 	libboltkv "github.com/bborbe/boltkv"
+	"github.com/bborbe/cqrs/base"
 	"github.com/bborbe/errors"
 	libhttp "github.com/bborbe/http"
 	libkafka "github.com/bborbe/kafka"
@@ -35,28 +36,31 @@ func main() {
 }
 
 type application struct {
-	SentryDSN       string            `required:"true"  arg:"sentry-dsn"        env:"SENTRY_DSN"        usage:"SentryDSN"                             display:"length"`
+	SentryDSN       string            `required:"true"  arg:"sentry-dsn"        env:"SENTRY_DSN"        usage:"SentryDSN"                                          display:"length"`
 	SentryProxy     string            `required:"false" arg:"sentry-proxy"      env:"SENTRY_PROXY"      usage:"Sentry Proxy"`
 	Listen          string            `required:"true"  arg:"listen"            env:"LISTEN"            usage:"address to listen to"`
 	KafkaBrokers    string            `required:"true"  arg:"kafka-brokers"     env:"KAFKA_BROKERS"     usage:"Comma separated list of Kafka brokers"`
-	BatchSize       int               `required:"true"  arg:"batch-size"        env:"BATCH_SIZE"        usage:"batch consume size"                                     default:"1"`
+	BatchSize       int               `required:"true"  arg:"batch-size"        env:"BATCH_SIZE"        usage:"batch consume size"                                                  default:"1"`
 	DataDir         string            `required:"true"  arg:"datadir"           env:"DATADIR"           usage:"data directory"`
-	BuildGitVersion string            `required:"false" arg:"build-git-version" env:"BUILD_GIT_VERSION" usage:"Build Git version"                                      default:"dev"`
-	BuildGitCommit  string            `required:"false" arg:"build-git-commit"  env:"BUILD_GIT_COMMIT"  usage:"Build Git commit hash"                                  default:"none"`
+	Branch          base.Branch       `required:"true"  arg:"branch"            env:"BRANCH"            usage:"branch whose apply commands this instance consumes"                  default:"dev"`
+	RepoDir         string            `required:"true"  arg:"repo-dir"          env:"NUKE_REPO_DIR"     usage:"path to the nuke deploy repo checkout"                               default:"/repo"`
+	BuildGitVersion string            `required:"false" arg:"build-git-version" env:"BUILD_GIT_VERSION" usage:"Build Git version"                                                   default:"dev"`
+	BuildGitCommit  string            `required:"false" arg:"build-git-commit"  env:"BUILD_GIT_COMMIT"  usage:"Build Git commit hash"                                               default:"none"`
 	BuildDate       *libtime.DateTime `required:"false" arg:"build-date"        env:"BUILD_DATE"        usage:"Build timestamp (RFC3339)"`
 }
 
 func (a *application) Run(ctx context.Context, sentryClient libsentry.Client) error {
 	libmetrics.NewBuildInfoMetrics().SetBuildInfo(a.BuildGitVersion, a.BuildGitCommit, a.BuildDate)
 
-	saramaClient, err := libkafka.CreateSaramaClient(
+	saramaClientProvider, err := libkafka.NewSaramaClientProviderByType(
 		ctx,
+		libkafka.SaramaClientProviderTypeReused,
 		libkafka.ParseBrokersFromString(a.KafkaBrokers),
 	)
 	if err != nil {
-		return errors.Wrap(ctx, err, "create sarama client failed")
+		return errors.Wrap(ctx, err, "create sarama client provider failed")
 	}
-	defer saramaClient.Close()
+	defer saramaClientProvider.Close()
 
 	syncProducer, err := libkafka.NewSyncProducerWithName(
 		ctx,
@@ -76,6 +80,13 @@ func (a *application) Run(ctx context.Context, sentryClient libsentry.Client) er
 
 	return service.Run(
 		ctx,
+		factory.CreateCommandConsumer(
+			saramaClientProvider,
+			syncProducer,
+			db,
+			a.Branch,
+			a.RepoDir,
+		),
 		a.createHTTPServer(sentryClient, db),
 	)
 
