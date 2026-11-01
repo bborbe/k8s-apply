@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 Please choose versions by [Semantic Versioning](http://semver.org/).
 
-## Unreleased
+## v0.7.0
 
 - feat: consume an `apply` command (schema `nuke-apply-v1`) from the branch-scoped CQRS request topic and run the named component's own `make BRANCH=dev apply` target, publishing one result per command
 - feat: refuse a component whose apply recipe invokes `docker`, and one with no apply target, with a Failure result naming the reason
