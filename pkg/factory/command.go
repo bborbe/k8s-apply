@@ -26,7 +26,7 @@ func CreateCommandConsumer(
 	saramaClientProvider libkafka.SaramaClientProvider,
 	syncProducer libkafka.SyncProducer,
 	db libkv.DB,
-	branch base.Branch,
+	stage apply.Stage,
 	repoDir string,
 ) run.Func {
 	logSamplerFactory := log.DefaultSamplerFactory
@@ -35,12 +35,12 @@ func CreateCommandConsumer(
 		syncProducer,
 		db,
 		apply.SchemaID,
-		base.TopicPrefixFromBranch(branch),
+		base.TopicPrefixFromBranch(stage.Branch()),
 		false,
 		cdb.CommandObjectExecutorTxs{
 			command.NewCommandObjectExecutorApply(
 				apply.NewComponentResolver(repoDir),
-				apply.NewApplier(branch.String(), logSamplerFactory),
+				apply.NewApplier(stage, logSamplerFactory),
 				logSamplerFactory,
 			),
 		},

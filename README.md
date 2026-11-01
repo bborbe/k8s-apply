@@ -4,7 +4,7 @@
 [![CI](https://github.com/bborbe/nuke-apply/actions/workflows/ci.yml/badge.svg)](https://github.com/bborbe/nuke-apply/actions/workflows/ci.yml)
 [![Go Report Card](https://goreportcard.com/badge/github.com/bborbe/nuke-apply)](https://goreportcard.com/report/github.com/bborbe/nuke-apply)
 
-**An in-cluster apply service for the `bborbe/nuke` deploy repo.** It consumes an `apply` command from Kafka (CQRS, published through the trading command gateway) and runs the named component's own `make apply` against the cluster it runs in — so nobody runs a deploy by hand.
+**An in-cluster apply service for a stage of a deploy repo.** It consumes an `apply` command from Kafka (CQRS, published through the trading command gateway) and runs the named component's own `make apply` against the cluster it runs in — so nobody runs a deploy by hand. One instance serves one named stage, `dev` (the `bborbe/nuke` dev cluster) or `sun` (the `bborbe/sun` cluster).
 
 ---
 
@@ -108,7 +108,7 @@ Configuration is managed through environment variables. See `example.env` for de
 | `SENTRY_PROXY` | Sentry proxy URL | (optional) |
 | `DATADIR` | Database storage directory | (required) |
 | `BATCH_SIZE` | Kafka batch consume size | `1` |
-| `BRANCH` | Branch whose apply commands this instance consumes | `dev` |
+| `STAGE` | Stage whose apply commands this instance consumes (`dev` or `sun`) | `dev` |
 | `NUKE_REPO_DIR` | Path to the `bborbe/nuke` checkout the apply targets run in | `/repo` |
 | `TEAMVAULT_URL` | TeamVault base URL, passed through to `teamvault-cli` | (from Secret) |
 | `TEAMVAULT_USER` | TeamVault user for this stage | (from Secret) |
@@ -173,7 +173,9 @@ POST /api/1.0/command/nuke-apply-v1/apply
 ```
 
 `path` is a component directory relative to the repo root. The service then runs exactly that
-component's own target — `make -C <repo>/<path> BRANCH=dev apply` — and never rewrites it.
+component's own target and never rewrites it. The stage decides the arguments: the `dev` stage runs
+`make -C <repo>/<path> BRANCH=dev apply`, while the `sun` stage passes no `BRANCH` at all
+(`make -C <repo>/<path> apply`), because sun's Makefiles select their environment unconditionally.
 
 Two refusals are by design and both publish a **Failure** result naming the reason:
 
@@ -181,8 +183,10 @@ Two refusals are by design and both publish a **Failure** result naming the reas
   image build belongs to the release pipeline)
 - a component with no `apply` target at all
 
-Only `BRANCH=dev` is accepted. The applier refuses any other branch, so a mis-set environment
-fails loudly instead of deploying somewhere unexpected.
+Only the stages `dev` and `sun` are accepted; any other `STAGE` value is refused, so a mis-set
+environment fails loudly instead of deploying somewhere unexpected. Two behaviours follow from the
+stage: `dev` passes `BRANCH=dev` to make, while `sun` passes no branch argument and instead refuses
+to apply unless the checkout's HEAD contains `origin/master`.
 
 ## API Documentation
 

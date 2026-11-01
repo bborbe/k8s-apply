@@ -96,7 +96,7 @@ spec:
           env:
             - name: LISTEN
               value: ':9090'
-            - name: BRANCH
+            - name: STAGE
               value: dev
             - name: NUKE_REPO_DIR
               value: /repo
