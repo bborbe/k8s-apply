@@ -96,8 +96,12 @@ spec:
           env:
             - name: LISTEN
               value: ':9090'
-            - name: BRANCH
-              value: dev
+            # STAGE, not BRANCH. The service derives two different branches from
+            # it — the make branch ("dev"/"master") and the cqrs branch whose
+            # topic prefix it consumes ("develop"/"master"). One shared BRANCH
+            # variable could not express prod, where those inputs differ.
+            - name: STAGE
+              value: '{{ "STAGE" | env }}'
             - name: NUKE_REPO_DIR
               value: /repo
             # teamvault-cli reads TEAMVAULT_URL / TEAMVAULT_USER / TEAMVAULT_PASS

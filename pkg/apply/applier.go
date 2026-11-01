@@ -14,10 +14,6 @@ import (
 	"github.com/golang/glog"
 )
 
-// DevBranch is the only branch this service may deploy. The service is
-// dev-scoped by construction: a prod deploy stays an operator action.
-const DevBranch = "dev"
-
 //counterfeiter:generate -o ../../mocks/applier.go --fake-name Applier . Applier
 
 // Applier runs one component's own apply target.
@@ -26,36 +22,42 @@ type Applier interface {
 }
 
 // NewApplier returns an Applier that shells out to the component's own make
-// target. It never rewrites the recipe: whatever the component's Makefile says
-// `apply` does is what runs.
-func NewApplier(branch string, logSamplerFactory log.SamplerFactory) Applier {
+// target for the given stage. It never rewrites the recipe: whatever the
+// component's Makefile says `apply` does is what runs.
+//
+// The stage, not a bare branch string, is the parameter: the branch handed to
+// make and the branch whose topics this instance consumes are different facts,
+// and only a stage knows both.
+func NewApplier(stage Stage, logSamplerFactory log.SamplerFactory) Applier {
 	return &applier{
-		branch:     branch,
+		stage:      stage,
 		logSampler: logSamplerFactory.Sampler(),
 	}
 }
 
 type applier struct {
-	branch     string
+	stage      Stage
 	logSampler log.Sampler
 }
 
 // makeArgs is the exact argv the applier hands to make. It is a named function
 // so the invocation is assertable in a test without running make.
-func makeArgs(component *Component, branch string) []string {
-	return []string{"-C", component.Dir, "BRANCH=" + branch, applyTarget}
+//
+// A stage that gates by a precondition inside its own recipes passes no BRANCH
+// at all — passing one there would assert a gate that stage does not use.
+func makeArgs(component *Component, stage Stage) []string {
+	args := []string{"-C", component.Dir}
+	if stage.RequiresBranchArgument() {
+		args = append(args, "BRANCH="+stage.ApplyBranch())
+	}
+	return append(args, applyTarget)
 }
 
 func (a *applier) Apply(ctx context.Context, component *Component) error {
-	if a.branch != DevBranch {
-		return errors.Errorf(
-			ctx,
-			"refusing to apply on branch '%s': this service only deploys '%s'",
-			a.branch,
-			DevBranch,
-		)
+	if err := a.stage.Validate(ctx); err != nil {
+		return err
 	}
-	args := makeArgs(component, a.branch)
+	args := makeArgs(component, a.stage)
 	// #nosec G204 -- the component path was validated by the resolver and make
 	// is the documented entry point of every component in the deploy repo.
 	cmd := exec.CommandContext(ctx, "make", args...)

@@ -28,9 +28,15 @@ const Operation base.CommandOperation = "apply"
 // operator needs to see. Returning cdb.ErrCommandObjectSkipped would publish
 // nothing at all, and returning nil,nil,nil would publish a Success that never
 // happened.
+//
+// The approver runs BEFORE the component is resolved and before any make
+// invocation: on a stage that requires one, a command without a valid approval
+// must not reach the filesystem, let alone a shell.
 func NewCommandObjectExecutorApply(
+	stage apply.Stage,
 	componentResolver apply.ComponentResolver,
 	applier apply.Applier,
+	approver apply.Approver,
 	logSamplerFactory log.SamplerFactory,
 ) cdb.CommandObjectExecutorTx {
 	logSampler := logSamplerFactory.Sampler()
@@ -48,6 +54,15 @@ func NewCommandObjectExecutorApply(
 			}
 			if err := command.Validate(ctx); err != nil {
 				return nil, nil, errors.Wrapf(ctx, err, "validate apply command failed")
+			}
+			if err := approver.Approve(ctx, stage, command); err != nil {
+				return nil, nil, errors.Wrapf(
+					ctx,
+					err,
+					"apply '%s' refused on stage '%s'",
+					command.Path,
+					string(stage),
+				)
 			}
 			component, err := componentResolver.Resolve(ctx, command.Path)
 			if err != nil {
