@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 Please choose versions by [Semantic Versioning](http://semver.org/).
 
-## Unreleased
+## v0.11.0
 
 - feat: refuse `path: teamvault` by design. Its `apply:` target only runs `envsubst` and `kubectl apply` over its own manifests — the TeamVault reads live in its separate operator-only `secrets:` target — so applying it would redeploy the component that holds every secret in the cluster without touching a single TeamVault grant. Neither the docker refusal nor a TeamVault grant list closes that path; this refusal is the only thing that does.
 
