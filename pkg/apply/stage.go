@@ -36,9 +36,11 @@ func (s Stage) ApplyBranch() string {
 	}
 }
 
-// RequiresBranchArgument reports whether ApplyBranch is passed to make.
+// RequiresBranchArgument reports whether ApplyBranch is passed to make. It is
+// derived from ApplyBranch, so any stage that returns a non-empty branch passes
+// it to make without editing this method.
 func (s Stage) RequiresBranchArgument() bool {
-	return s == StageDev
+	return s.ApplyBranch() != ""
 }
 
 // RequiresApproval reports whether the stage gates on a recorded operator

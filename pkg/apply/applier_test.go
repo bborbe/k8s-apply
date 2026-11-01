@@ -32,13 +32,13 @@ var _ = Describe("makeArgs", func() {
 
 var _ = Describe("Applier", func() {
 	It("refuses an unknown stage", func() {
-		applier := NewApplier(Stage("prod"), log.DefaultSamplerFactory)
+		applier := NewApplier(Stage("bogus"), log.DefaultSamplerFactory)
 		component := &Component{Path: "egress", Dir: "/repo/egress"}
 
 		err := applier.Apply(context.Background(), component)
 
 		Expect(err).NotTo(BeNil())
-		Expect(err.Error()).To(ContainSubstring("unknown stage 'prod'"))
+		Expect(err.Error()).To(ContainSubstring("unknown stage 'bogus'"))
 	})
 
 	It("reports a missing component directory as a failure rather than a success", func() {

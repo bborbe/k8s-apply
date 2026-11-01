@@ -34,6 +34,19 @@ var _ = Describe("Stage", func() {
 		Entry("sun", apply.StageSun, "", false, false, true, base.Branch("sun")),
 	)
 
+	// This is a forward-looking guard. For the current dev/sun set the
+	// assertion also holds on the pre-derivation code, so it does not by
+	// itself verify that RequiresBranchArgument is derived from ApplyBranch.
+	DescribeTable("branch-argument derivation",
+		func(stage apply.Stage) {
+			Expect(stage.RequiresBranchArgument()).To(Equal(stage.ApplyBranch() != ""))
+		},
+		// every stage must be added here — this invariant is what stops a new
+		// stage that returns a branch from silently passing no BRANCH.
+		Entry("dev", apply.StageDev),
+		Entry("sun", apply.StageSun),
+	)
+
 	DescribeTable("the consumed Kafka topic prefix",
 		func(stage apply.Stage, prefix string) {
 			Expect(base.TopicPrefixFromBranch(stage.Branch()).String()).To(Equal(prefix))
@@ -63,7 +76,6 @@ var _ = Describe("ParseStage", func() {
 			Expect(err.Error()).To(ContainSubstring("unknown stage '" + name + "'"))
 		},
 		Entry("empty", ""),
-		Entry("prod", "prod"),
-		Entry("arbitrary", "staging"),
+		Entry("arbitrary", "bogus"),
 	)
 })
