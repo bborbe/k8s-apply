@@ -81,4 +81,52 @@ var _ = Describe("ComponentResolver", func() {
 		Expect(err.Error()).To(ContainSubstring("docker component refused"))
 		Expect(err.Error()).To(ContainSubstring("egress-proxy"))
 	})
+
+	It("refuses an excluded component by name even when its apply target is valid", func() {
+		writeMakefile("teamvault", "apply:\n\tenvsubst < x.yaml | kubectl apply -f -\n")
+
+		_, err := resolver.Resolve(ctx, "teamvault")
+
+		Expect(err).NotTo(BeNil())
+		Expect(errors.Is(err, apply.ErrExcludedComponent)).To(BeTrue())
+		Expect(err.Error()).To(ContainSubstring("excluded by design"))
+		Expect(err.Error()).To(ContainSubstring("teamvault"))
+	})
+
+	It("refuses an excluded component that is absent from the checkout", func() {
+		// The refusal must not depend on what the checkout happens to contain —
+		// otherwise a repo that dropped the directory would silently un-exclude it.
+		_, err := resolver.Resolve(ctx, "teamvault")
+
+		Expect(errors.Is(err, apply.ErrExcludedComponent)).To(BeTrue())
+	})
+
+	It("refuses an excluded component ahead of the docker refusal", func() {
+		// Ordering is load-bearing: the exclusion must win, or a component that
+		// both is excluded and builds an image would report the wrong reason.
+		writeMakefile("teamvault", "apply:\n\tdocker build -t x .\n")
+
+		_, err := resolver.Resolve(ctx, "teamvault")
+
+		Expect(errors.Is(err, apply.ErrExcludedComponent)).To(BeTrue())
+		Expect(errors.Is(err, apply.ErrDockerComponent)).To(BeFalse())
+	})
+
+	// The by-name refusal is an exact map lookup, so it is safe only because
+	// Command.Validate rejects every non-clean path first. These entries pin that
+	// dependency: if the clean-path guard ever loosens, this table fails rather
+	// than a variant silently reaching os.Stat.
+	DescribeTable("refuses every path variant of an excluded component",
+		func(path string) {
+			writeMakefile("teamvault", "apply:\n\tkubectl apply -f x.yaml\n")
+
+			_, err := resolver.Resolve(ctx, path)
+
+			Expect(err).NotTo(BeNil())
+		},
+		Entry("trailing slash", "teamvault/"),
+		Entry("leading dot", "./teamvault"),
+		Entry("duplicate slash", "teamvault//"),
+		Entry("traversal", "teamvault/../teamvault"),
+	)
 })

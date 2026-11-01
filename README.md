@@ -167,7 +167,7 @@ A CQRS consumer with the standard bborbe service shell around it:
 - `main.go` — entry point; wires the Kafka client provider, producer, BoltDB and both run funcs
 - `pkg/factory/` — `CreateCommandConsumer` wires the schema, the topic prefix and the executors
 - `pkg/command/` — the `apply` executor: unmarshals the command, resolves the component, runs it
-- `pkg/apply/` — the command payload, the component resolver, the docker refusal and the applier
+- `pkg/apply/` — the command payload, the component resolver with its three refusals, and the applier
 - `pkg/handler/` — HTTP handlers for health, metrics and log level
 
 ### The apply command
@@ -185,11 +185,17 @@ component's own target and never rewrites it. The stage decides the arguments: t
 `make -C <repo>/<path> BRANCH=dev apply`, while the `sun` stage passes no `BRANCH` at all
 (`make -C <repo>/<path> apply`), because sun's Makefiles select their environment unconditionally.
 
-Two refusals are by design and both publish a **Failure** result naming the reason:
+Three refusals are by design and all publish a **Failure** result naming the reason:
 
 - a component whose `apply` recipe invokes `docker` (there is no docker daemon in the pod, and an
   image build belongs to the release pipeline)
 - a component with no `apply` target at all
+- a component excluded by name. `teamvault` is the one entry: its `apply` target only runs `envsubst`
+  and `kubectl apply` over its own manifests, and the TeamVault reads live in its separate,
+  operator-only `secrets` target — so applying it would redeploy the component that holds every
+  secret in the cluster without touching a single TeamVault grant. The exclusion is checked before
+  the component is looked for on disk, so a checkout that dropped the directory cannot silently
+  un-exclude it.
 
 Only the stages `dev` and `sun` are accepted; any other `STAGE` value is refused, so a mis-set
 environment fails loudly instead of deploying somewhere unexpected. Two behaviours follow from the
