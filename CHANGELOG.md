@@ -17,6 +17,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 - fix: mark the attention token `display:"length"` so the startup config dump prints its length instead of the bearer token itself
 - feat: refuse a plain-http `ATTENTION_URL` unless the host is an in-cluster Service, so the bearer token is never sent in clear text to a routable host
 
+## v0.11.0
+
+- feat: refuse `path: teamvault` by design. Its `apply:` target only runs `envsubst` and `kubectl apply` over its own manifests — the TeamVault reads live in its separate operator-only `secrets:` target — so applying it would redeploy the component that holds every secret in the cluster without touching a single TeamVault grant. Neither the docker refusal nor a TeamVault grant list closes that path; this refusal is the only thing that does.
+
 ## v0.10.0
 
 - feat: generalise the apply service around a `Stage` so one instance deploys one named stage, deriving the make `BRANCH` argument, checkout guard and approval decision from it
