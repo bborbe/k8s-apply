@@ -63,7 +63,7 @@ func ActionHash(stage Stage, component, commit string) string {
 // task names get their own message so the result topic can carry a reason an
 // operator can act on rather than "invalid json".
 func ParseApproval(ctx context.Context, raw json.RawMessage) (*Approval, error) {
-	trimmed := trimSpace(raw)
+	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || string(trimmed) == "null" {
 		return nil, nil
 	}
@@ -89,7 +89,7 @@ func ParseApproval(ctx context.Context, raw json.RawMessage) (*Approval, error) 
 				len(items),
 			)
 		}
-		trimmed = trimSpace(items[0])
+		trimmed = bytes.TrimSpace(items[0])
 	}
 	var approval Approval
 	if err := json.Unmarshal(trimmed, &approval); err != nil {
@@ -108,8 +108,4 @@ func ParseApproval(ctx context.Context, raw json.RawMessage) (*Approval, error) 
 		return nil, errors.Errorf(ctx, "approval carries no commit")
 	}
 	return &approval, nil
-}
-
-func trimSpace(raw []byte) []byte {
-	return bytes.TrimSpace(raw)
 }

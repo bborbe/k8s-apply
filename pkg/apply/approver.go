@@ -119,7 +119,7 @@ func (a *AttentionStoreApprover) Approve(ctx context.Context, stage Stage, comma
 	if err != nil {
 		return err
 	}
-	approvedAt, expiresAt, err := a.verifyWindow(ctx, approval)
+	approvedAt, _, err := a.verifyWindow(ctx, approval)
 	if err != nil {
 		return err
 	}
@@ -127,7 +127,7 @@ func (a *AttentionStoreApprover) Approve(ctx context.Context, stage Stage, comma
 	if err != nil {
 		return err
 	}
-	return verifyItem(ctx, approval, item, expected, approvedAt, expiresAt)
+	return verifyItem(ctx, approval, item, expected, approvedAt)
 }
 
 // verifyPayload decides everything the command alone can settle, and returns
@@ -213,7 +213,6 @@ func verifyItem(
 	item *attentionItem,
 	expected string,
 	approvedAt time.Time,
-	_ time.Time,
 ) error {
 	// The binding is the item's dedup_key, never its payload: payload is
 	// operator-facing display text, and driving a decision from it is how a
