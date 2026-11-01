@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 Please choose versions by [Semantic Versioning](http://semver.org/).
 
-## Unreleased
+## v0.12.0
 
 - feat: add the `prod` stage — make branch `master`, cqrs branch `prod` — because the branch handed to make and the branch whose topics this instance consumes are different facts, and both happen to yield the topic prefix `master`, so one shared variable would read correct and consume the wrong topic the day either changes
 - feat: refuse a command on `prod` unless it carries exactly one recorded operator approval, verified against the attention store before the component is even resolved — so a refused command never reaches the filesystem, let alone a shell
