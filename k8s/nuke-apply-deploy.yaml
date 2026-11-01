@@ -75,7 +75,7 @@ spec:
               export GIT_SSH_COMMAND="ssh -i /tmp/id_ed25519 \
                 -o StrictHostKeyChecking=yes \
                 -o UserKnownHostsFile=/known-hosts/known_hosts"
-              git clone --depth 1 --branch dev git@github.com:bborbe/nuke.git /repo
+              git clone --depth 1 --branch {{"BRANCH" | env}} git@github.com:bborbe/nuke.git /repo
           volumeMounts:
             - mountPath: /repo
               name: repo
@@ -102,6 +102,18 @@ spec:
             # variable could not express prod, where those inputs differ.
             - name: STAGE
               value: '{{ "STAGE" | env }}'
+            # The stage that requires an approval reads it from the attention
+            # store. Both are empty on dev, where the service wires the noop
+            # approver; a prod pod with ATTENTION_URL empty fails at startup
+            # rather than silently skipping the gate.
+            - name: ATTENTION_URL
+              value: '{{ "ATTENTION_URL" | env }}'
+            - name: ATTENTION_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  key: token
+                  name: nuke-apply-attention
+                  optional: true
             - name: NUKE_REPO_DIR
               value: /repo
             # teamvault-cli reads TEAMVAULT_URL / TEAMVAULT_USER / TEAMVAULT_PASS

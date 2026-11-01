@@ -16,7 +16,11 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-const testCommit = "b786ef4aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+const (
+	testCommit    = "b786ef4aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	testAnswered  = "2026-11-01T20:05:00Z"
+	testExpiresAt = "2026-11-01T22:00:00Z"
+)
 
 func approvalFor(stage Stage, component, commit string) *Approval {
 	return &Approval{
@@ -24,8 +28,8 @@ func approvalFor(stage Stage, component, commit string) *Approval {
 		Component:    component,
 		Commit:       commit,
 		ApprovedBy:   "operator",
-		ApprovedAt:   "2026-11-01T20:00:00Z",
-		ExpiresAt:    "2026-11-01T22:00:00Z",
+		ApprovedAt:   testAnswered,
+		ExpiresAt:    testExpiresAt,
 		ActionSHA256: ActionHash(stage, component, commit),
 	}
 }
@@ -52,7 +56,7 @@ func answeredItem(dedupKey, kind, value string) map[string]any {
 		"item_id":     "0123456789abcdef",
 		"dedup_key":   dedupKey,
 		"state":       "answered",
-		"answered_at": "2026-11-01T20:05:00Z",
+		"answered_at": testAnswered,
 		"answer":      map[string]any{"kind": kind, "value": value},
 	}
 }
@@ -121,10 +125,38 @@ var _ = Describe("ParseApproval", func() {
 		Expect(err.Error()).To(ContainSubstring("more than one approval carried"))
 	})
 
+	// Zero and many are different mistakes; an operator reading the result topic
+	// must be able to tell which one they made.
+	It("names an empty list as no approval, not as too many", func() {
+		_, err := ParseApproval(ctx, json.RawMessage(`[]`))
+		Expect(err).NotTo(BeNil())
+		Expect(err.Error()).To(ContainSubstring("no approval carried"))
+		Expect(err.Error()).NotTo(ContainSubstring("more than one"))
+	})
+
 	It("accepts a single-element array", func() {
-		approval, err := ParseApproval(ctx, json.RawMessage(`[{"id":"a","action_sha256":"h"}]`))
+		approval, err := ParseApproval(ctx, json.RawMessage(
+			`[{"id":"a","component":"x","commit":"c","action_sha256":"h"}]`,
+		))
 		Expect(err).To(BeNil())
 		Expect(approval.ID).To(Equal("a"))
+	})
+
+	// A missing component or commit must be refused by name; left to
+	// ActionHash it would surface as a hash mismatch and name the wrong cause.
+	It("refuses an approval with no component", func() {
+		_, err := ParseApproval(ctx, json.RawMessage(`{"id":"a","commit":"c","action_sha256":"h"}`))
+		Expect(err).NotTo(BeNil())
+		Expect(err.Error()).To(ContainSubstring("carries no component"))
+	})
+
+	It("refuses an approval with no commit", func() {
+		_, err := ParseApproval(
+			ctx,
+			json.RawMessage(`{"id":"a","component":"x","action_sha256":"h"}`),
+		)
+		Expect(err).NotTo(BeNil())
+		Expect(err.Error()).To(ContainSubstring("carries no commit"))
 	})
 
 	It("refuses an approval with no id", func() {
@@ -287,6 +319,33 @@ var _ = Describe("AttentionStoreApprover", func() {
 		err := approverFor(server).Approve(ctx, StageProd, commandWith(approval))
 		Expect(err).NotTo(BeNil())
 		Expect(err.Error()).To(ContainSubstring("not yet valid"))
+	})
+
+	// The window must come from the store, not from the payload: otherwise the
+	// party being gated chooses when its own approval was given.
+	It("refuses an approved_at that disagrees with the store's answered_at", func() {
+		approval := approvalFor(StageProd, "alertmanager", testCommit)
+		approval.ApprovedAt = "2026-11-01T12:00:00Z"
+		approval.ExpiresAt = "2026-11-01T14:00:00Z"
+		server := storeServing(answeredItem(approval.ActionSHA256, "option", ApprovalOptionApprove))
+		defer server.Close()
+
+		now = time.Date(2026, 11, 1, 13, 0, 0, 0, time.UTC)
+
+		err := approverFor(server).Approve(ctx, StageProd, commandWith(approval))
+		Expect(err).NotTo(BeNil())
+		Expect(err.Error()).To(ContainSubstring("must match the record"))
+	})
+
+	It("refuses a declared window longer than the maximum lifetime", func() {
+		approval := approvalFor(StageProd, "alertmanager", testCommit)
+		approval.ExpiresAt = "2026-11-09T20:05:00Z"
+		server := storeServing(answeredItem(approval.ActionSHA256, "option", ApprovalOptionApprove))
+		defer server.Close()
+
+		err := approverFor(server).Approve(ctx, StageProd, commandWith(approval))
+		Expect(err).NotTo(BeNil())
+		Expect(err.Error()).To(ContainSubstring("above the"))
 	})
 
 	It("reports an unreachable store rather than treating it as no approval", func() {

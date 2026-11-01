@@ -6,6 +6,7 @@ package command_test
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/bborbe/cqrs/base"
 	"github.com/bborbe/cqrs/cdb"
@@ -25,6 +26,7 @@ var _ = Describe("CommandObjectExecutorApply", func() {
 	var componentResolver *mocks.ComponentResolver
 	var applier *mocks.Applier
 	var approver *mocks.Approver
+	var revision *mocks.Revision
 	var executor cdb.CommandObjectExecutorTx
 
 	BeforeEach(func() {
@@ -32,11 +34,13 @@ var _ = Describe("CommandObjectExecutorApply", func() {
 		componentResolver = &mocks.ComponentResolver{}
 		applier = &mocks.Applier{}
 		approver = &mocks.Approver{}
+		revision = &mocks.Revision{}
 		executor = command.NewCommandObjectExecutorApply(
 			apply.StageDev,
 			componentResolver,
 			applier,
 			approver,
+			revision,
 			log.DefaultSamplerFactory,
 		)
 	})
@@ -121,6 +125,7 @@ var _ = Describe("CommandObjectExecutorApply", func() {
 			componentResolver,
 			applier,
 			apply.NewNoopApprover(),
+			revision,
 			log.DefaultSamplerFactory,
 		)
 
@@ -133,6 +138,54 @@ var _ = Describe("CommandObjectExecutorApply", func() {
 		Expect(err).NotTo(BeNil())
 		Expect(err.Error()).To(ContainSubstring("no approver is configured"))
 		Expect(applier.ApplyCallCount()).To(Equal(0))
+	})
+
+	// The approval names a commit; make runs against whatever the pod cloned.
+	// Without this check the binding is paperwork — the hash can say commit A
+	// while the checkout sits at commit B.
+	It("refuses when the checkout is not the approved commit", func() {
+		approver.ApproveReturns(nil)
+		revision.VerifyReturns(errors.Errorf(ctx, "checkout is at b, the approval covers a"))
+
+		prodExecutor := command.NewCommandObjectExecutorApply(
+			apply.StageProd,
+			componentResolver,
+			applier,
+			approver,
+			revision,
+			log.DefaultSamplerFactory,
+		)
+		raw, err := json.Marshal(map[string]any{
+			"id":            "abc",
+			"component":     "alertmanager",
+			"commit":        "aaa",
+			"action_sha256": apply.ActionHash(apply.StageProd, "alertmanager", "aaa"),
+		})
+		Expect(err).To(BeNil())
+
+		_, _, err = prodExecutor.HandleCommand(
+			ctx,
+			nil,
+			commandObject(base.Event{"path": "alertmanager", "approval": json.RawMessage(raw)}),
+		)
+
+		Expect(err).NotTo(BeNil())
+		Expect(err.Error()).To(ContainSubstring("checkout is at b"))
+		Expect(revision.VerifyCallCount()).To(Equal(1))
+		Expect(componentResolver.ResolveCallCount()).To(Equal(0))
+		Expect(applier.ApplyCallCount()).To(Equal(0))
+	})
+
+	It("does not consult the revision on a stage that needs no approval", func() {
+		componentResolver.ResolveReturns(&apply.Component{Path: "alertmanager"}, nil)
+
+		_, _, err := executor.HandleCommand(
+			ctx,
+			nil,
+			commandObject(base.Event{"path": "alertmanager"}),
+		)
+		Expect(err).To(BeNil())
+		Expect(revision.VerifyCallCount()).To(Equal(0))
 	})
 
 	It("fails without resolving when the command carries no path", func() {

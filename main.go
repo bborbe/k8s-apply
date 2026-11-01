@@ -6,7 +6,9 @@ package main
 
 import (
 	"context"
+	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	libboltkv "github.com/bborbe/boltkv"
@@ -44,7 +46,7 @@ type application struct {
 	DataDir         string            `required:"true"  arg:"datadir"           env:"DATADIR"           usage:"data directory"`
 	Stage           apply.Stage       `required:"true"  arg:"stage"             env:"STAGE"             usage:"deploy stage this instance applies (dev or prod)"                                      default:"dev"`
 	AttentionURL    string            `required:"false" arg:"attention-url"     env:"ATTENTION_URL"     usage:"attention store base URL, required on a stage that needs an approval"`
-	AttentionToken  string            `required:"false" arg:"attention-token"   env:"ATTENTION_TOKEN"   usage:"bearer token for the attention store's gated listener"`
+	AttentionToken  string            `required:"false" arg:"attention-token"   env:"ATTENTION_TOKEN"   usage:"bearer token for the attention store's gated listener"                display:"length"`
 	RepoDir         string            `required:"true"  arg:"repo-dir"          env:"NUKE_REPO_DIR"     usage:"path to the nuke deploy repo checkout"                                                 default:"/repo"`
 	BuildGitVersion string            `required:"false" arg:"build-git-version" env:"BUILD_GIT_VERSION" usage:"Build Git version"                                                                     default:"dev"`
 	BuildGitCommit  string            `required:"false" arg:"build-git-commit"  env:"BUILD_GIT_COMMIT"  usage:"Build Git commit hash"                                                                 default:"none"`
@@ -120,7 +122,41 @@ func (a *application) createApprover(ctx context.Context) (apply.Approver, error
 			string(a.Stage),
 		)
 	}
+	if err := validateAttentionURL(ctx, a.AttentionURL); err != nil {
+		return nil, err
+	}
 	return apply.NewAttentionStoreApprover(a.AttentionURL, a.AttentionToken, time.Now), nil
+}
+
+// validateAttentionURL refuses a scheme that would put the bearer token on the
+// wire in clear text.
+//
+// Plain http is allowed only for an in-cluster Service address, where the
+// traffic never leaves the pod network — the prod store is a ClusterIP reached
+// over http, so refusing http outright would make the gate unusable. Anything
+// routable must be https.
+func validateAttentionURL(ctx context.Context, raw string) error {
+	parsed, err := url.Parse(raw)
+	if err != nil {
+		return errors.Wrapf(ctx, err, "parse ATTENTION_URL failed")
+	}
+	if parsed.Scheme == "https" {
+		return nil
+	}
+	if parsed.Scheme != "http" {
+		return errors.Errorf(ctx, "ATTENTION_URL must be http or https, got '%s'", parsed.Scheme)
+	}
+	host := parsed.Hostname()
+	if strings.HasSuffix(host, ".svc.cluster.local") ||
+		strings.HasSuffix(host, ".svc") ||
+		!strings.Contains(host, ".") {
+		return nil
+	}
+	return errors.Errorf(
+		ctx,
+		"ATTENTION_URL '%s' is plain http to a routable host: the bearer token would travel in clear text — use https",
+		raw,
+	)
 }
 
 func (a *application) createHTTPServer(

@@ -72,7 +72,17 @@ func ParseApproval(ctx context.Context, raw json.RawMessage) (*Approval, error) 
 		if err := json.Unmarshal(trimmed, &items); err != nil {
 			return nil, errors.Wrap(ctx, err, "parse approval array failed")
 		}
-		if len(items) != 1 {
+		// Zero and many are different refusals: an empty list is "you carried
+		// nothing", not "you carried too much", and an operator reading the
+		// result topic needs to know which mistake they made.
+		switch len(items) {
+		case 0:
+			return nil, errors.Errorf(
+				ctx,
+				"no approval carried: the approval list is empty, exactly one is required",
+			)
+		case 1:
+		default:
 			return nil, errors.Errorf(
 				ctx,
 				"more than one approval carried: %d approvals, exactly one is required",
@@ -87,6 +97,15 @@ func ParseApproval(ctx context.Context, raw json.RawMessage) (*Approval, error) 
 	}
 	if approval.ID == "" {
 		return nil, errors.Errorf(ctx, "approval carries no id")
+	}
+	// A missing component or commit would otherwise reach ActionHash and come
+	// back as a hash mismatch, which names the wrong cause: the payload is
+	// incomplete, not the digest.
+	if approval.Component == "" {
+		return nil, errors.Errorf(ctx, "approval carries no component")
+	}
+	if approval.Commit == "" {
+		return nil, errors.Errorf(ctx, "approval carries no commit")
 	}
 	return &approval, nil
 }

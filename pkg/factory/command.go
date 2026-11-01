@@ -61,6 +61,7 @@ func CreateCommandConsumer(
 				apply.NewComponentResolver(repoDir),
 				apply.NewApplier(stage, logSamplerFactory),
 				approver,
+				apply.NewGitRevision(repoDir),
 				logSamplerFactory,
 			),
 		},

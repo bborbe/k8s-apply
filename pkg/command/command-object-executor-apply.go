@@ -21,6 +21,57 @@ import (
 // of the gateway URL: POST /api/1.0/command/nuke-apply-v1/apply.
 const Operation base.CommandOperation = "apply"
 
+// enforceApproval refuses a command the stage will not accept: no recorded
+// approval where one is required, or a checkout that is not the approved
+// revision.
+//
+// It runs before the component is resolved, so a refused command never reaches
+// the filesystem, let alone a shell.
+func enforceApproval(
+	ctx context.Context,
+	stage apply.Stage,
+	command apply.Command,
+	approver apply.Approver,
+	revision apply.Revision,
+) error {
+	if err := approver.Approve(ctx, stage, command); err != nil {
+		return errors.Wrapf(
+			ctx,
+			err,
+			"apply '%s' refused on stage '%s'",
+			command.Path,
+			string(stage),
+		)
+	}
+	// An approval names a commit; make runs against whatever the pod cloned.
+	// Without this check the binding is paperwork — the hash can say commit A
+	// while the checkout sits at commit B.
+	if !stage.RequiresApproval() {
+		return nil
+	}
+	approval, err := apply.ParseApproval(ctx, command.Approval)
+	if err != nil {
+		return err
+	}
+	if approval == nil {
+		return errors.Errorf(
+			ctx,
+			"apply '%s' reached the revision check with no approval",
+			command.Path,
+		)
+	}
+	if err := revision.Verify(ctx, approval.Commit); err != nil {
+		return errors.Wrapf(
+			ctx,
+			err,
+			"apply '%s' refused on stage '%s'",
+			command.Path,
+			string(stage),
+		)
+	}
+	return nil
+}
+
 // NewCommandObjectExecutorApply returns the executor for the apply operation.
 //
 // Every failure path returns a real error on purpose: the result sender turns a
@@ -37,6 +88,7 @@ func NewCommandObjectExecutorApply(
 	componentResolver apply.ComponentResolver,
 	applier apply.Applier,
 	approver apply.Approver,
+	revision apply.Revision,
 	logSamplerFactory log.SamplerFactory,
 ) cdb.CommandObjectExecutorTx {
 	logSampler := logSamplerFactory.Sampler()
@@ -55,14 +107,8 @@ func NewCommandObjectExecutorApply(
 			if err := command.Validate(ctx); err != nil {
 				return nil, nil, errors.Wrapf(ctx, err, "validate apply command failed")
 			}
-			if err := approver.Approve(ctx, stage, command); err != nil {
-				return nil, nil, errors.Wrapf(
-					ctx,
-					err,
-					"apply '%s' refused on stage '%s'",
-					command.Path,
-					string(stage),
-				)
+			if err := enforceApproval(ctx, stage, command, approver, revision); err != nil {
+				return nil, nil, err
 			}
 			component, err := componentResolver.Resolve(ctx, command.Path)
 			if err != nil {

@@ -7,12 +7,16 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 ## Unreleased
 
 - feat: parameterise the service by **stage** (`dev` | `prod`) instead of a bare branch, because the branch handed to make and the branch whose topics this instance consumes are different facts — prod's make branch is `master` while its cqrs branch is `prod`, and both happen to yield the topic prefix `master`, so one shared `BRANCH` variable would read correct and consume the wrong topic the day either changes
-- feat: a stage may pass **no** `BRANCH` to make at all (`RequiresBranchArgument`), for a stage whose components gate themselves with a precondition inside their own recipes rather than by argument
+- feat: add `RequiresBranchArgument` so a future stage can pass **no** `BRANCH` to make — for a stage whose components gate themselves with a precondition inside their own recipes rather than by argument. No stage in this build exercises the false path; it exists so adding one is not a change to the applier
 - feat: refuse a command on a stage that requires one recorded operator approval unless it carries exactly one, verified against the attention store before the component is even resolved — so a refused command never reaches the filesystem, let alone a shell
+- feat: verify the deploy-repo checkout's `HEAD` equals the commit the approval covers before running make, so the commit binding is a control rather than paperwork
+- feat: bound the approval window by the store's own `answered_at` (5-minute skew) and cap the declared lifetime at 24 h, so `approved_at` and `expires_at` cannot be whatever the publisher typed
 - feat: bind the approval to the action with `sha256("apply\n" + stage + "\n" + component + "\n" + commit)`, compared against the attention item's `dedup_key` (machine-exact) rather than its `payload` (operator-facing display text), so an approval cannot be replayed onto another component, another commit, or another stage
 - feat: refuse two approvals by name rather than as a generic unmarshal error, and refuse an approval past its `expires_at` window
-- security: fail closed when a stage that requires an approval is wired with the noop approver — a prod deployment that forgot to configure one refuses every apply instead of silently skipping the gate
-- feat: replace the `BRANCH` env with `STAGE` in the deployment, and fail at startup if a stage that requires an approval has no `ATTENTION_URL`
+- feat: fail closed when a stage that requires an approval is wired with the noop approver — a prod deployment that forgot to configure one refuses every apply instead of silently skipping the gate
+- feat: replace the `BRANCH` env with `STAGE` in the deployment, source it from `example.env` so the rendered manifest is never empty, parameterise the init container's clone branch, and wire `ATTENTION_URL` / `ATTENTION_TOKEN`
+- fix: mark the attention token `display:"length"` so the startup config dump prints its length instead of the bearer token itself
+- feat: refuse a plain-http `ATTENTION_URL` unless the host is an in-cluster Service, so the bearer token is never sent in clear text to a routable host
 
 ## v0.9.0
 

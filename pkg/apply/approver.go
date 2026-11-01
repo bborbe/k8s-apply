@@ -18,6 +18,19 @@ import (
 
 //counterfeiter:generate -o ../../mocks/approver.go --fake-name Approver . Approver
 
+// approvalClockSkew bounds how far a command's approved_at may sit from the
+// store's answered_at for the same item.
+//
+// Without it the approval window is self-asserted: the payload could claim any
+// approved_at and any expires_at and the service would honour them, with the
+// store never corroborating that the operator answered then. The store's
+// answered_at is the one timestamp the producer cannot write.
+const approvalClockSkew = 5 * time.Minute
+
+// maxApprovalLifetime caps the window a payload may declare. A gate whose
+// expiry is chosen by the party being gated is not an expiry.
+const maxApprovalLifetime = 24 * time.Hour
+
 // Approver decides whether a command may be applied on a given stage.
 //
 // It is a separate collaborator from the Applier on purpose: the Applier runs
@@ -102,58 +115,106 @@ func (a *AttentionStoreApprover) Approve(ctx context.Context, stage Stage, comma
 		return nil
 	}
 
-	approval, err := ParseApproval(ctx, command.Approval)
+	approval, expected, err := verifyPayload(ctx, stage, command)
 	if err != nil {
 		return err
 	}
+	approvedAt, expiresAt, err := a.verifyWindow(ctx, approval)
+	if err != nil {
+		return err
+	}
+	item, err := a.fetch(ctx, approval.ID)
+	if err != nil {
+		return err
+	}
+	return verifyItem(ctx, approval, item, expected, approvedAt, expiresAt)
+}
+
+// verifyPayload decides everything the command alone can settle, and returns
+// the approval plus the action hash the record must agree with.
+func verifyPayload(
+	ctx context.Context,
+	stage Stage,
+	command Command,
+) (*Approval, string, error) {
+	approval, err := ParseApproval(ctx, command.Approval)
+	if err != nil {
+		return nil, "", err
+	}
 	if approval == nil {
-		return errors.Errorf(
+		return nil, "", errors.Errorf(
 			ctx,
 			"no approval carried: stage '%s' applies only with one recorded operator approval",
 			string(stage),
 		)
 	}
 	if approval.Component != command.Path {
-		return errors.Errorf(
+		return nil, "", errors.Errorf(
 			ctx,
 			"approval names component '%s' but the command applies '%s'",
 			approval.Component,
 			command.Path,
 		)
 	}
-
 	expected := ActionHash(stage, command.Path, approval.Commit)
 	if approval.ActionSHA256 != expected {
-		return errors.Errorf(
+		return nil, "", errors.Errorf(
 			ctx,
 			"approval action hash does not match this change: it covers a different stage, component or commit",
 		)
 	}
+	return approval, expected, nil
+}
 
+// verifyWindow checks the payload's declared window against the clock, and
+// returns both bounds so the record check can compare them with the store.
+func (a *AttentionStoreApprover) verifyWindow(
+	ctx context.Context,
+	approval *Approval,
+) (time.Time, time.Time, error) {
 	approvedAt, err := parseTime(ctx, approval.ApprovedAt, "approved_at")
 	if err != nil {
-		return err
+		return time.Time{}, time.Time{}, err
 	}
 	expiresAt, err := parseTime(ctx, approval.ExpiresAt, "expires_at")
 	if err != nil {
-		return err
+		return time.Time{}, time.Time{}, err
 	}
 	now := a.now()
 	if now.Before(approvedAt) {
-		return errors.Errorf(ctx, "approval is not yet valid: approved_at is in the future")
+		return time.Time{}, time.Time{}, errors.Errorf(
+			ctx,
+			"approval is not yet valid: approved_at is in the future",
+		)
 	}
 	if !now.Before(expiresAt) {
-		return errors.Errorf(
+		return time.Time{}, time.Time{}, errors.Errorf(
 			ctx,
 			"approval expired at %s: an approval carried past its window is stale",
 			approval.ExpiresAt,
 		)
 	}
-
-	item, err := a.fetch(ctx, approval.ID)
-	if err != nil {
-		return err
+	if lifetime := expiresAt.Sub(approvedAt); lifetime > maxApprovalLifetime {
+		return time.Time{}, time.Time{}, errors.Errorf(
+			ctx,
+			"approval '%s' declares a %s window, above the %s maximum",
+			approval.ID,
+			lifetime,
+			maxApprovalLifetime,
+		)
 	}
+	return approvedAt, expiresAt, nil
+}
+
+// verifyItem checks the stored record against the payload.
+func verifyItem(
+	ctx context.Context,
+	approval *Approval,
+	item *attentionItem,
+	expected string,
+	approvedAt time.Time,
+	_ time.Time,
+) error {
 	// The binding is the item's dedup_key, never its payload: payload is
 	// operator-facing display text, and driving a decision from it is how a
 	// gate ends up matching the sentence rather than the action.
@@ -175,6 +236,22 @@ func (a *AttentionStoreApprover) Approve(ctx context.Context, stage Stage, comma
 	}
 	if item.AnsweredAt == "" {
 		return errors.Errorf(ctx, "approval '%s' carries an answer but no answered_at", approval.ID)
+	}
+	// The store's answered_at is authoritative; the payload's approved_at only
+	// has to agree with it. Otherwise the window is whatever the publisher
+	// typed.
+	answeredAt, err := parseTime(ctx, item.AnsweredAt, "answered_at")
+	if err != nil {
+		return err
+	}
+	if skew := approvedAt.Sub(answeredAt); skew > approvalClockSkew || skew < -approvalClockSkew {
+		return errors.Errorf(
+			ctx,
+			"approval '%s' claims approved_at %s but the store answered it at %s: the window must match the record, not the payload",
+			approval.ID,
+			approval.ApprovedAt,
+			item.AnsweredAt,
+		)
 	}
 	return nil
 }
