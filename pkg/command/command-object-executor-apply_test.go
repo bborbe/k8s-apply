@@ -102,6 +102,26 @@ var _ = Describe("CommandObjectExecutorApply", func() {
 		Expect(applier.ApplyCallCount()).To(Equal(0))
 	})
 
+	It("surfaces an excluded-component refusal and never calls the applier", func() {
+		componentResolver.ResolveReturns(nil, errors.Wrapf(
+			ctx,
+			apply.ErrExcludedComponent,
+			"component '%s' is excluded by design",
+			"teamvault",
+		))
+
+		_, _, err := executor.HandleCommand(
+			ctx,
+			nil,
+			commandObject(base.Event{"path": "teamvault"}),
+		)
+
+		Expect(err).NotTo(BeNil())
+		Expect(errors.Is(err, apply.ErrExcludedComponent)).To(BeTrue())
+		Expect(err.Error()).To(ContainSubstring("excluded by design"))
+		Expect(applier.ApplyCallCount()).To(Equal(0))
+	})
+
 	It("surfaces an apply failure as an error", func() {
 		componentResolver.ResolveReturns(&apply.Component{Path: "x"}, nil)
 		applier.ApplyReturns(errors.Errorf(ctx, "make exited 2"))

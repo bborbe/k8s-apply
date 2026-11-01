@@ -81,4 +81,23 @@ var _ = Describe("ComponentResolver", func() {
 		Expect(err.Error()).To(ContainSubstring("docker component refused"))
 		Expect(err.Error()).To(ContainSubstring("egress-proxy"))
 	})
+
+	It("refuses an excluded component by name even when its apply target is valid", func() {
+		writeMakefile("teamvault", "apply:\n\tenvsubst < x.yaml | kubectl apply -f -\n")
+
+		_, err := resolver.Resolve(ctx, "teamvault")
+
+		Expect(err).NotTo(BeNil())
+		Expect(errors.Is(err, apply.ErrExcludedComponent)).To(BeTrue())
+		Expect(err.Error()).To(ContainSubstring("excluded by design"))
+		Expect(err.Error()).To(ContainSubstring("teamvault"))
+	})
+
+	It("refuses an excluded component that is absent from the checkout", func() {
+		// The refusal must not depend on what the checkout happens to contain —
+		// otherwise a repo that dropped the directory would silently un-exclude it.
+		_, err := resolver.Resolve(ctx, "teamvault")
+
+		Expect(errors.Is(err, apply.ErrExcludedComponent)).To(BeTrue())
+	})
 })
