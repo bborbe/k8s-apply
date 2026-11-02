@@ -9,7 +9,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/bborbe/nuke-apply/pkg/apply"
+	"github.com/bborbe/k8s-apply/pkg/apply"
 )
 
 var _ = Describe("Stage topic prefix", func() {

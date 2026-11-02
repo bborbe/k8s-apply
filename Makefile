@@ -3,12 +3,12 @@ include Makefile.precommit
 include Makefile.docker
 include example.env
 
-SERVICE = bborbe/nuke-apply
+SERVICE = bborbe/k8s-apply
 
 run:
 	@go run -mod=mod main.go \
 	-sentry-dsn="$(shell teamvault-url --teamvault-config ~/.teamvault.json --teamvault-key=${SENTRY_DSN_KEY})" \
-	-listen="localhost:${NUKE_APPLY_PORT}" \
+	-listen="localhost:${K8S_APPLY_PORT}" \
 	-kafka-brokers="${KAFKA_BROKERS}" \
 	-datadir="data" \
 	-batch-size="100" \

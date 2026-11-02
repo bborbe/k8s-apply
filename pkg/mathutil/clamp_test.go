@@ -8,7 +8,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/bborbe/nuke-apply/pkg/mathutil"
+	"github.com/bborbe/k8s-apply/pkg/mathutil"
 )
 
 var _ = DescribeTable("Clamp",

@@ -5,7 +5,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/bborbe/nuke-apply/pkg/apply"
+	"github.com/bborbe/k8s-apply/pkg/apply"
 )
 
 type Approver struct {

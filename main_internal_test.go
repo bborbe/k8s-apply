@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/bborbe/nuke-apply/pkg/apply"
+	"github.com/bborbe/k8s-apply/pkg/apply"
 )
 
 // The suite in main_test.go is an external package and only compiles the
