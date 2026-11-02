@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 Please choose versions by [Semantic Versioning](http://semver.org/).
 
-## Unreleased
+## v0.13.0
 
 - refactor: rename the service from `nuke-apply` to `k8s-apply` — repo, Go module, image, schema group, and the `NUKE_REPO_DIR` env var (now `REPO_DIR`). Nothing about the service was nuke-specific except its names: it takes its stage from `STAGE` and its checkout from a path, and the sun task already ran the same image against `bborbe/sun`. Renaming while dev is the only live consumer keeps it a one-cluster change; every later stage would otherwise add a schema migration and a topic drain. The schema id becomes `k8s-apply-v1`, so the topics become `develop-k8s-apply-v1-{request,event,result,history}` and the gateway path `/api/1.0/command/k8s-apply-v1/apply`.
 
