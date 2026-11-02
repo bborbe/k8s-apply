@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 Please choose versions by [Semantic Versioning](http://semver.org/).
 
+## Unreleased
+
+- chore: update github.com/bborbe/boltkv to v1.16.6, github.com/bborbe/kv to v1.21.28, github.com/bborbe/time to v1.27.25
+
 ## v0.12.0
 
 - feat: add the `prod` stage — make branch `master`, cqrs branch `prod` — because the branch handed to make and the branch whose topics this instance consumes are different facts, and both happen to yield the topic prefix `master`, so one shared variable would read correct and consume the wrong topic the day either changes
