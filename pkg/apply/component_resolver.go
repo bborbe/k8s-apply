@@ -19,6 +19,12 @@ import (
 // of running them, because the pod has no docker daemon and no docker config:
 // the image work belongs to the release pipeline, not to a deploy command, and
 // a target that assumes a daemon would fail in a way that names nothing useful.
+//
+// The check is textual, and deliberately so: it sees a docker command written
+// literally in the recipe, behind make's `@`/`-`/`+` prefixes. It does not see
+// one reached through a variable (`$(DOCKER) build`), through `podman`, through
+// `docker-compose`, or through `sh -c 'docker …'`. Treat it as a guard against
+// the shape that actually appears in this repo, not as a sandbox.
 var ErrDockerComponent = stderrors.New("docker component refused")
 
 // ErrNotApplicable is returned when a component has no apply target at all.

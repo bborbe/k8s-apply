@@ -40,11 +40,13 @@ var _ = Describe("extractRecipe", func() {
 	})
 
 	It("strips make's command prefixes", func() {
-		content := "apply:\n\t@echo hi\n\t-docker build .\n\t@-kubectl apply -f x.yaml\n"
+		content := "apply:\n\t@echo hi\n\t-docker build .\n\t@-kubectl apply -f x.yaml\n\t+docker push x\n\t-@docker build .\n"
 		Expect(extractRecipe(content)).To(Equal([]string{
 			"echo hi",
 			"docker build .",
 			"kubectl apply -f x.yaml",
+			"docker push x",
+			"docker build .",
 		}))
 	})
 
