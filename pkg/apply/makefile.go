@@ -16,6 +16,17 @@ const applyTarget = "apply"
 // starting with anything else ends the recipe.
 const recipeLinePrefix = "\t"
 
+// recipeCommandPrefixes are the characters make strips from the front of a
+// recipe line before handing it to the shell: `@` suppresses echoing the
+// command, `-` ignores a non-zero exit, and `+` forces the line to run even
+// under `-n`. They may be combined in any order (`@-`, `-@`).
+//
+// They matter to the docker refusal because a prefixed line runs exactly the
+// command it prefixes: `@docker manifest inspect` needs a docker binary just as
+// plainly as `docker manifest inspect` does. Reading only the unprefixed form
+// let such a component through as if it were an ordinary kubectl apply.
+const recipeCommandPrefixes = "@-+"
+
 // dockerInvocation matches a docker command as a whole word inside a recipe,
 // so a component that merely mentions docker in a comment or a variable name
 // is not refused.
@@ -49,6 +60,16 @@ func extractRecipe(content string) []string {
 			break
 		}
 		body := strings.TrimPrefix(line, recipeLinePrefix)
+		// Prefixes are recognised only at the start of a recipe line, never on
+		// a backslash-continued one. In
+		//     docker build \
+		//     -t x .
+		// the second line's `-` is the shell flag for `docker build`, not make's
+		// ignore-errors marker; stripping it there would silently corrupt the
+		// command this function reports.
+		if pending.Len() == 0 {
+			body = strings.TrimLeft(body, recipeCommandPrefixes)
+		}
 		if strings.HasSuffix(body, `\`) {
 			pending.WriteString(strings.TrimSuffix(body, `\`))
 			pending.WriteString(" ")
