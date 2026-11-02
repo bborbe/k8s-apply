@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 Please choose versions by [Semantic Versioning](http://semver.org/).
 
+## Unreleased
+
+- fix: strip make's recipe-line prefixes (`@`, `-`, `+`) before looking for a docker invocation, so a component whose `apply:` target writes `@docker manifest inspect` is refused like any other docker-running component instead of passing the check and reaching a shell with no daemon; the strip applies only to the first physical line of a recipe entry, because a leading `-` on a backslash-continued line is a shell flag and removing it would corrupt the command
+- fix: say `invokes docker in its apply target` rather than `builds a container image`, since the refusal covers registry reads as well as builds
+
 ## v0.12.0
 
 - feat: add the `prod` stage — make branch `master`, cqrs branch `prod` — because the branch handed to make and the branch whose topics this instance consumes are different facts, and both happen to yield the topic prefix `master`, so one shared variable would read correct and consume the wrong topic the day either changes
