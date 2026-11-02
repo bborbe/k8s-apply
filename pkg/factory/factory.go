@@ -9,7 +9,7 @@ import (
 
 	libsentry "github.com/bborbe/sentry"
 
-	"github.com/bborbe/nuke-apply/pkg/handler"
+	"github.com/bborbe/k8s-apply/pkg/handler"
 )
 
 // CreateTestLoglevelHandler creates an HTTP handler that tests different glog verbosity levels.

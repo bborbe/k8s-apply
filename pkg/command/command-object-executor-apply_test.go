@@ -16,9 +16,9 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/bborbe/nuke-apply/mocks"
-	"github.com/bborbe/nuke-apply/pkg/apply"
-	"github.com/bborbe/nuke-apply/pkg/command"
+	"github.com/bborbe/k8s-apply/mocks"
+	"github.com/bborbe/k8s-apply/pkg/apply"
+	"github.com/bborbe/k8s-apply/pkg/command"
 )
 
 var _ = Describe("CommandObjectExecutorApply", func() {

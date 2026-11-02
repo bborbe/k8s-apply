@@ -7,10 +7,10 @@ package apply
 import "github.com/bborbe/cqrs/cdb"
 
 // SchemaID identifies the apply command schema. Its string form
-// "nuke-apply-v1" is the gateway path segment, and the branch prefix turns it
-// into the dev topics develop-nuke-apply-v1-{request,result,event,history}.
+// "k8s-apply-v1" is the gateway path segment, and the branch prefix turns it
+// into the dev topics develop-k8s-apply-v1-{request,result,event,history}.
 var SchemaID = cdb.SchemaID{
-	Group:   "nuke",
+	Group:   "k8s",
 	Kind:    "apply",
 	Version: "v1",
 }

@@ -26,11 +26,11 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
-	"github.com/bborbe/nuke-apply/pkg/apply"
-	"github.com/bborbe/nuke-apply/pkg/factory"
+	"github.com/bborbe/k8s-apply/pkg/apply"
+	"github.com/bborbe/k8s-apply/pkg/factory"
 )
 
-const serviceName = "nuke-apply"
+const serviceName = "k8s-apply"
 
 func main() {
 	app := &application{}
@@ -47,7 +47,7 @@ type application struct {
 	Stage           string            `required:"true"  arg:"stage"             env:"STAGE"             usage:"stage whose apply commands this instance consumes"                                     default:"dev"`
 	AttentionURL    string            `required:"false" arg:"attention-url"     env:"ATTENTION_URL"     usage:"attention store base URL, required on a stage that needs an approval"`
 	AttentionToken  string            `required:"false" arg:"attention-token"   env:"ATTENTION_TOKEN"   usage:"bearer token for the attention store's gated listener"                display:"length"`
-	RepoDir         string            `required:"true"  arg:"repo-dir"          env:"NUKE_REPO_DIR"     usage:"path to the deploy repo checkout this stage applies from"                              default:"/repo"`
+	RepoDir         string            `required:"true"  arg:"repo-dir"          env:"REPO_DIR"          usage:"path to the deploy repo checkout this stage applies from"                              default:"/repo"`
 	BuildGitVersion string            `required:"false" arg:"build-git-version" env:"BUILD_GIT_VERSION" usage:"Build Git version"                                                                     default:"dev"`
 	BuildGitCommit  string            `required:"false" arg:"build-git-commit"  env:"BUILD_GIT_COMMIT"  usage:"Build Git commit hash"                                                                 default:"none"`
 	BuildDate       *libtime.DateTime `required:"false" arg:"build-date"        env:"BUILD_DATE"        usage:"Build timestamp (RFC3339)"`

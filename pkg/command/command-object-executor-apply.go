@@ -14,11 +14,11 @@ import (
 	"github.com/bborbe/log"
 	"github.com/golang/glog"
 
-	"github.com/bborbe/nuke-apply/pkg/apply"
+	"github.com/bborbe/k8s-apply/pkg/apply"
 )
 
 // Operation is the wire name of the apply command. It is the last path segment
-// of the gateway URL: POST /api/1.0/command/nuke-apply-v1/apply.
+// of the gateway URL: POST /api/1.0/command/k8s-apply-v1/apply.
 const Operation base.CommandOperation = "apply"
 
 // enforceApproval refuses a command the stage will not accept: no recorded

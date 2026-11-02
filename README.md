@@ -1,8 +1,8 @@
 # Nuke Apply
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/bborbe/nuke-apply.svg)](https://pkg.go.dev/github.com/bborbe/nuke-apply)
-[![CI](https://github.com/bborbe/nuke-apply/actions/workflows/ci.yml/badge.svg)](https://github.com/bborbe/nuke-apply/actions/workflows/ci.yml)
-[![Go Report Card](https://goreportcard.com/badge/github.com/bborbe/nuke-apply)](https://goreportcard.com/report/github.com/bborbe/nuke-apply)
+[![Go Reference](https://pkg.go.dev/badge/github.com/bborbe/k8s-apply.svg)](https://pkg.go.dev/github.com/bborbe/k8s-apply)
+[![CI](https://github.com/bborbe/k8s-apply/actions/workflows/ci.yml/badge.svg)](https://github.com/bborbe/k8s-apply/actions/workflows/ci.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/bborbe/k8s-apply)](https://goreportcard.com/report/github.com/bborbe/k8s-apply)
 
 **An in-cluster apply service for a stage of a deploy repo.** It consumes an `apply` command from Kafka (CQRS, published through the trading command gateway) and runs the named component's own `make apply` against the cluster it runs in — so nobody runs a deploy by hand. One instance serves one named stage, `dev` (the `bborbe/nuke` dev cluster) or `sun` (the `bborbe/sun` cluster).
 
@@ -55,7 +55,7 @@
 As a template project, you typically copy this repository rather than installing it as a dependency. However, if you need to reference it:
 
 ```bash
-go get github.com/bborbe/nuke-apply
+go get github.com/bborbe/k8s-apply
 ```
 
 ## Quick Start
@@ -109,7 +109,7 @@ Configuration is managed through environment variables. See `example.env` for de
 | `DATADIR` | Database storage directory | (required) |
 | `BATCH_SIZE` | Kafka batch consume size | `1` |
 | `STAGE` | Stage whose apply commands this instance consumes (`dev` or `sun`) | `dev` |
-| `NUKE_REPO_DIR` | Path to the deploy repo checkout the apply targets run in | `/repo` |
+| `REPO_DIR` | Path to the deploy repo checkout the apply targets run in | `/repo` |
 | `TEAMVAULT_URL` | TeamVault base URL, passed through to `teamvault-cli` | (from Secret) |
 | `TEAMVAULT_USER` | TeamVault user for this stage | (from Secret) |
 | `TEAMVAULT_PASS` | TeamVault password for this stage | (from Secret) |
@@ -137,17 +137,17 @@ which would silently defeat per-stage credentials.
 **This repo is not deployed from here.** Its manifests live in the deploy repo, as a component:
 
 ```
-bborbe/nuke/nuke-apply/
+bborbe/nuke/k8s-apply/
 ```
 
 Deploy with that component's own target, which is how every other service in the fleet deploys:
 
 ```bash
-cd ~/Documents/workspaces/nuke-dev/nuke-apply && BRANCH=dev make apply
+cd ~/Documents/workspaces/nuke-dev/k8s-apply && BRANCH=dev make apply
 ```
 
 The component renders every manifest through `teamvault-cli config parse` and applies it with the
-pod's own ServiceAccount. It ships the Deployment, the `nuke-apply` ServiceAccount with its Role,
+pod's own ServiceAccount. It ships the Deployment, the `k8s-apply` ServiceAccount with its Role,
 github.com's pinned SSH host keys, and both Secrets — rendered from TeamVault, never hand-created.
 
 A `k8s/` directory used to live here. It was skeleton leftover: its `Makefile` included a
@@ -172,11 +172,11 @@ A CQRS consumer with the standard bborbe service shell around it:
 
 ### The apply command
 
-The service consumes schema `nuke-apply-v1` (group `nuke`, kind `apply`, version `v1`) on the topic
-`develop-nuke-apply-v1-request` and publishes one result per command to `develop-nuke-apply-v1-result`.
+The service consumes schema `k8s-apply-v1` (group `nuke`, kind `apply`, version `v1`) on the topic
+`develop-k8s-apply-v1-request` and publishes one result per command to `develop-k8s-apply-v1-result`.
 
 ```
-POST /api/1.0/command/nuke-apply-v1/apply
+POST /api/1.0/command/k8s-apply-v1/apply
 {"path": "alert-controller"}
 ```
 
@@ -204,7 +204,7 @@ to apply unless the checkout's HEAD contains `origin/master`.
 
 ## API Documentation
 
-For complete API documentation of the handlers and packages, visit [pkg.go.dev](https://pkg.go.dev/github.com/bborbe/nuke-apply).
+For complete API documentation of the handlers and packages, visit [pkg.go.dev](https://pkg.go.dev/github.com/bborbe/k8s-apply).
 
 ---
 
@@ -217,7 +217,7 @@ Example tests are included to demonstrate testing patterns - copy and adapt thes
 ## Usage as Template
 
 1. Copy this repository as a starting point for your new service
-2. Update service name throughout (replace "nuke-apply")
+2. Update service name throughout (replace "k8s-apply")
 3. Modify handlers and add your business logic
 4. Update configuration in `example.env` and K8s manifests
 5. Implement your specific Kafka consumers/producers and database schema

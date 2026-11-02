@@ -10,7 +10,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/bborbe/nuke-apply/pkg/textwrap"
+	"github.com/bborbe/k8s-apply/pkg/textwrap"
 )
 
 var _ = Describe("Wrap", func() {

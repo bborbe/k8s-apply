@@ -1,4 +1,4 @@
-module github.com/bborbe/nuke-apply
+module github.com/bborbe/k8s-apply
 
 go 1.27.3
 

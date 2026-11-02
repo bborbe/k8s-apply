@@ -12,8 +12,8 @@ import (
 	"github.com/bborbe/log"
 	"github.com/bborbe/run"
 
-	"github.com/bborbe/nuke-apply/pkg/apply"
-	"github.com/bborbe/nuke-apply/pkg/command"
+	"github.com/bborbe/k8s-apply/pkg/apply"
+	"github.com/bborbe/k8s-apply/pkg/command"
 )
 
 // CQRSBranch is the branch whose topic prefix this stage consumes.
