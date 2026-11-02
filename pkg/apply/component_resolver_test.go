@@ -82,6 +82,37 @@ var _ = Describe("ComponentResolver", func() {
 		Expect(err.Error()).To(ContainSubstring("egress-proxy"))
 	})
 
+	It("refuses docker behind make's silent prefix", func() {
+		// `@` only suppresses echoing the command. The line still runs docker,
+		// so a component written this way must be refused exactly like the
+		// unprefixed form — otherwise it reaches a shell that has no daemon.
+		writeMakefile("egress-proxy", "apply:\n\t@docker manifest inspect x:tag\n")
+
+		_, err := resolver.Resolve(ctx, "egress-proxy")
+
+		Expect(errors.Is(err, apply.ErrDockerComponent)).To(BeTrue())
+		Expect(err.Error()).To(ContainSubstring("egress-proxy"))
+	})
+
+	It("refuses docker behind make's ignore-error prefix", func() {
+		writeMakefile("dashdocker", "apply:\n\t-docker build -t x .\n")
+
+		_, err := resolver.Resolve(ctx, "dashdocker")
+
+		Expect(errors.Is(err, apply.ErrDockerComponent)).To(BeTrue())
+	})
+
+	It("still resolves a prefixed non-docker apply target", func() {
+		// The prefix strip must not turn an ordinary silent kubectl line into a
+		// refusal — over-stripping in the other direction is just as wrong.
+		writeMakefile("plain", "apply:\n\t@kubectl apply -f x.yaml\n")
+
+		component, err := resolver.Resolve(ctx, "plain")
+
+		Expect(err).To(BeNil())
+		Expect(component.Recipe).To(Equal([]string{"kubectl apply -f x.yaml"}))
+	})
+
 	It("refuses an excluded component by name even when its apply target is valid", func() {
 		writeMakefile("teamvault", "apply:\n\tenvsubst < x.yaml | kubectl apply -f -\n")
 

@@ -38,6 +38,24 @@ var _ = Describe("extractRecipe", func() {
 		content := "apply-all:\n\tdocker build .\n"
 		Expect(extractRecipe(content)).To(BeNil())
 	})
+
+	It("strips make's command prefixes", func() {
+		content := "apply:\n\t@echo hi\n\t-docker build .\n\t@-kubectl apply -f x.yaml\n\t+docker push x\n\t-@docker build .\n"
+		Expect(extractRecipe(content)).To(Equal([]string{
+			"echo hi",
+			"docker build .",
+			"kubectl apply -f x.yaml",
+			"docker push x",
+			"docker build .",
+		}))
+	})
+
+	It("keeps a leading dash on a continuation line", func() {
+		// The `-` here is the shell flag for `docker build`, not make's
+		// ignore-errors marker, so it must survive.
+		content := "apply:\n\tdocker build \\\n\t-t x .\n"
+		Expect(extractRecipe(content)).To(Equal([]string{"docker build  -t x ."}))
+	})
 })
 
 var _ = Describe("runsDocker", func() {

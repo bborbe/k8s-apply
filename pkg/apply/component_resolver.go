@@ -13,10 +13,18 @@ import (
 	"github.com/bborbe/errors"
 )
 
-// ErrDockerComponent is returned when a component's apply target builds or
-// pushes a container image. v1 of this service refuses those by name instead
-// of running them, because an in-cluster build has no docker daemon and the
-// image build belongs to the release pipeline, not to a deploy command.
+// ErrDockerComponent is returned when a component's apply target invokes
+// docker at all — a build, a push, or a registry read such as
+// `docker manifest inspect`. v1 of this service refuses those by name instead
+// of running them, because the pod has no docker daemon and no docker config:
+// the image work belongs to the release pipeline, not to a deploy command, and
+// a target that assumes a daemon would fail in a way that names nothing useful.
+//
+// The check is textual, and deliberately so: it sees a docker command written
+// literally in the recipe, behind make's `@`/`-`/`+` prefixes. It does not see
+// one reached through a variable (`$(DOCKER) build`), through `podman`, through
+// `docker-compose`, or through `sh -c 'docker …'`. Treat it as a guard against
+// the shape that actually appears in this repo, not as a sandbox.
 var ErrDockerComponent = stderrors.New("docker component refused")
 
 // ErrNotApplicable is returned when a component has no apply target at all.
@@ -108,7 +116,7 @@ func (c *componentResolver) Resolve(ctx context.Context, path string) (*Componen
 		return nil, errors.Wrapf(
 			ctx,
 			ErrDockerComponent,
-			"component '%s' builds a container image in its apply target",
+			"component '%s' invokes docker in its apply target",
 			path,
 		)
 	}
