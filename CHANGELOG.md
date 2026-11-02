@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 Please choose versions by [Semantic Versioning](http://semver.org/).
 
-## Unreleased
+## v0.13.1
 
 - chore: update github.com/bborbe/boltkv to v1.16.6, github.com/bborbe/kafka to v1.29.11, github.com/bborbe/kv to v1.21.28, github.com/bborbe/run to v1.11.10, github.com/bborbe/time to v1.27.25
 
