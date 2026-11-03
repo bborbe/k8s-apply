@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 Please choose versions by [Semantic Versioning](http://semver.org/).
 
+## Unreleased
+
+- feat: roll a component back when its post-apply health check fails. `make apply` exits 0 the moment the manifests land and never observes the rollout, so an apply that leaves the stage broken used to report success. The applier now records every Deployment's container images before the apply, waits up to `HEALTH_TIMEOUT` (default `5m`) for each rollout to reach `updatedReplicas == availableReplicas == replicas` with no unavailable replica, and on a failed check patches the recorded images back. The Failure entry on the result topic names the failed check (with the replica counters) and the images restored, or why nothing was restored (new Deployment, image unchanged)
+- feat: read and patch Deployments through an in-cluster client scoped to the pod's own namespace (`NAMESPACE` overrides it); the existing namespaced Role already grants `apps/deployments` get + patch. Outside a cluster the service now fails at startup instead of skipping the check
+- feat: refuse to apply a component whose manifest declares a Deployment with a templated name, since its pre-apply image cannot be captured
+
 ## v0.13.1
 
 - chore: update github.com/bborbe/boltkv to v1.16.6, github.com/bborbe/kafka to v1.29.11, github.com/bborbe/kv to v1.21.28, github.com/bborbe/run to v1.11.10, github.com/bborbe/time to v1.27.25

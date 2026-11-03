@@ -5,6 +5,8 @@
 package factory
 
 import (
+	"time"
+
 	"github.com/bborbe/cqrs/base"
 	"github.com/bborbe/cqrs/cdb"
 	libkafka "github.com/bborbe/kafka"
@@ -39,6 +41,9 @@ func CQRSBranch(stage apply.Stage) base.Branch {
 //
 // The approver is consulted inside the executor, before any make invocation, so
 // a stage that requires an approval cannot reach a shell without one.
+//
+// The applier is health-checked: an apply that lands but leaves a Deployment
+// unhealthy within healthCheckTimeout is rolled back to its pre-apply images.
 func CreateCommandConsumer(
 	saramaClientProvider libkafka.SaramaClientProvider,
 	syncProducer libkafka.SyncProducer,
@@ -46,8 +51,17 @@ func CreateCommandConsumer(
 	stage apply.Stage,
 	repoDir string,
 	approver apply.Approver,
+	deploymentClient apply.DeploymentClient,
+	healthCheckTimeout time.Duration,
 ) run.Func {
 	logSamplerFactory := log.DefaultSamplerFactory
+	applier := apply.NewHealthCheckedApplier(
+		apply.NewApplier(stage, logSamplerFactory),
+		apply.NewDeploymentFinder(),
+		deploymentClient,
+		healthCheckTimeout,
+		5*time.Second,
+	)
 	return cdb.RunCommandConsumerTxDefault(
 		saramaClientProvider,
 		syncProducer,
@@ -59,7 +73,7 @@ func CreateCommandConsumer(
 			command.NewCommandObjectExecutorApply(
 				stage,
 				apply.NewComponentResolver(repoDir),
-				apply.NewApplier(stage, logSamplerFactory),
+				applier,
 				approver,
 				apply.NewGitRevision(repoDir),
 				logSamplerFactory,
