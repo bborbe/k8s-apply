@@ -136,7 +136,8 @@ var _ = Describe("HealthCheckedApplier", func() {
 
 		err := applier.Apply(ctx, component)
 
-		Expect(err).To(MatchError("make failed"))
+		Expect(err).To(HaveOccurred())
+		Expect(err.Error()).To(ContainSubstring("make failed"))
 		Expect(client.StatusCallCount()).To(Equal(0))
 		Expect(client.SetImagesCallCount()).To(Equal(0))
 	})

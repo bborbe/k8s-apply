@@ -61,8 +61,15 @@ func (h *healthCheckedApplier) Apply(ctx context.Context, component *Component) 
 		before[name] = images
 	}
 
+	// An apply that fails leaves nothing new to observe: the health check and
+	// the restore only follow an apply that landed.
 	if err := h.inner.Apply(ctx, component); err != nil {
-		return err
+		return errors.Wrapf(
+			ctx,
+			err,
+			"apply component '%s' failed before the health check",
+			component.Path,
+		)
 	}
 
 	var failures []string
