@@ -25,6 +25,8 @@ import (
 	"github.com/golang/glog"
 	"github.com/gorilla/mux"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 
 	"github.com/bborbe/k8s-apply/pkg/apply"
 	"github.com/bborbe/k8s-apply/pkg/factory"
@@ -38,18 +40,20 @@ func main() {
 }
 
 type application struct {
-	SentryDSN       string            `required:"true"  arg:"sentry-dsn"        env:"SENTRY_DSN"        usage:"SentryDSN"                                                            display:"length"`
+	SentryDSN       string            `required:"true"  arg:"sentry-dsn"        env:"SENTRY_DSN"        usage:"SentryDSN"                                                                                display:"length"`
 	SentryProxy     string            `required:"false" arg:"sentry-proxy"      env:"SENTRY_PROXY"      usage:"Sentry Proxy"`
 	Listen          string            `required:"true"  arg:"listen"            env:"LISTEN"            usage:"address to listen to"`
 	KafkaBrokers    string            `required:"true"  arg:"kafka-brokers"     env:"KAFKA_BROKERS"     usage:"Comma separated list of Kafka brokers"`
-	BatchSize       int               `required:"true"  arg:"batch-size"        env:"BATCH_SIZE"        usage:"batch consume size"                                                                    default:"1"`
+	BatchSize       int               `required:"true"  arg:"batch-size"        env:"BATCH_SIZE"        usage:"batch consume size"                                                                                        default:"1"`
 	DataDir         string            `required:"true"  arg:"datadir"           env:"DATADIR"           usage:"data directory"`
-	Stage           string            `required:"true"  arg:"stage"             env:"STAGE"             usage:"stage whose apply commands this instance consumes"                                     default:"dev"`
+	Stage           string            `required:"true"  arg:"stage"             env:"STAGE"             usage:"stage whose apply commands this instance consumes"                                                         default:"dev"`
 	AttentionURL    string            `required:"false" arg:"attention-url"     env:"ATTENTION_URL"     usage:"attention store base URL, required on a stage that needs an approval"`
-	AttentionToken  string            `required:"false" arg:"attention-token"   env:"ATTENTION_TOKEN"   usage:"bearer token for the attention store's gated listener"                display:"length"`
-	RepoDir         string            `required:"true"  arg:"repo-dir"          env:"REPO_DIR"          usage:"path to the deploy repo checkout this stage applies from"                              default:"/repo"`
-	BuildGitVersion string            `required:"false" arg:"build-git-version" env:"BUILD_GIT_VERSION" usage:"Build Git version"                                                                     default:"dev"`
-	BuildGitCommit  string            `required:"false" arg:"build-git-commit"  env:"BUILD_GIT_COMMIT"  usage:"Build Git commit hash"                                                                 default:"none"`
+	AttentionToken  string            `required:"false" arg:"attention-token"   env:"ATTENTION_TOKEN"   usage:"bearer token for the attention store's gated listener"                                    display:"length"`
+	RepoDir         string            `required:"true"  arg:"repo-dir"          env:"REPO_DIR"          usage:"path to the deploy repo checkout this stage applies from"                                                  default:"/repo"`
+	Namespace       string            `required:"false" arg:"namespace"         env:"NAMESPACE"         usage:"namespace whose Deployments the post-apply health check reads; defaults to the pod's own"`
+	HealthTimeout   time.Duration     `required:"true"  arg:"health-timeout"    env:"HEALTH_TIMEOUT"    usage:"how long a Deployment may take to become healthy after an apply before it is rolled back"                  default:"5m"`
+	BuildGitVersion string            `required:"false" arg:"build-git-version" env:"BUILD_GIT_VERSION" usage:"Build Git version"                                                                                         default:"dev"`
+	BuildGitCommit  string            `required:"false" arg:"build-git-commit"  env:"BUILD_GIT_COMMIT"  usage:"Build Git commit hash"                                                                                     default:"none"`
 	BuildDate       *libtime.DateTime `required:"false" arg:"build-date"        env:"BUILD_DATE"        usage:"Build timestamp (RFC3339)"`
 }
 
@@ -92,6 +96,11 @@ func (a *application) Run(ctx context.Context, sentryClient libsentry.Client) er
 		return err
 	}
 
+	deploymentClient, err := a.createDeploymentClient(ctx)
+	if err != nil {
+		return err
+	}
+
 	return service.Run(
 		ctx,
 		factory.CreateCommandConsumer(
@@ -101,6 +110,8 @@ func (a *application) Run(ctx context.Context, sentryClient libsentry.Client) er
 			stage,
 			a.RepoDir,
 			approver,
+			deploymentClient,
+			a.HealthTimeout,
 		),
 		a.createHTTPServer(sentryClient, db),
 	)
@@ -131,6 +142,37 @@ func (a *application) createApprover(
 		return nil, err
 	}
 	return apply.NewAttentionStoreApprover(a.AttentionURL, a.AttentionToken, time.Now), nil
+}
+
+// serviceAccountNamespaceFile is where every in-cluster pod finds its own
+// namespace.
+const serviceAccountNamespaceFile = "/var/run/secrets/kubernetes.io/serviceaccount/namespace"
+
+// createDeploymentClient builds the in-cluster client the post-apply health
+// check reads and restores Deployments through. Its Role is namespaced, so the
+// client is scoped to the pod's own namespace unless NAMESPACE overrides it.
+//
+// Running outside a cluster is a startup failure rather than a silently
+// skipped check: an apply service that cannot observe the stage would report
+// success on every broken rollout, which is the defect this check exists for.
+func (a *application) createDeploymentClient(ctx context.Context) (apply.DeploymentClient, error) {
+	namespace := a.Namespace
+	if namespace == "" {
+		content, err := os.ReadFile(serviceAccountNamespaceFile)
+		if err != nil {
+			return nil, errors.Wrapf(ctx, err, "read pod namespace failed; set NAMESPACE")
+		}
+		namespace = strings.TrimSpace(string(content))
+	}
+	config, err := rest.InClusterConfig()
+	if err != nil {
+		return nil, errors.Wrapf(ctx, err, "create in-cluster config failed")
+	}
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, errors.Wrapf(ctx, err, "create kubernetes clientset failed")
+	}
+	return apply.NewDeploymentClient(clientset, namespace), nil
 }
 
 // validateAttentionURL refuses a scheme that would put the bearer token on the
