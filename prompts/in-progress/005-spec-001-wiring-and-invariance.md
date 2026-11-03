@@ -1,7 +1,8 @@
 ---
-spec: ["001-health-gated-promotion"]
-status: draft
+status: approved
+spec: [001-health-gated-promotion]
 created: "2026-11-03T22:30:50Z"
+queued: "2026-11-03T23:05:51Z"
 ---
 
 # feat: wire the promotion on dev only and prove the other stages did not move
