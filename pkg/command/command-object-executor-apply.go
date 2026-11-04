@@ -15,6 +15,7 @@ import (
 	"github.com/golang/glog"
 
 	"github.com/bborbe/k8s-apply/pkg/apply"
+	"github.com/bborbe/k8s-apply/pkg/promotion"
 )
 
 // Operation is the wire name of the apply command. It is the last path segment
@@ -83,12 +84,17 @@ func enforceApproval(
 // The approver runs BEFORE the component is resolved and before any make
 // invocation: on a stage that requires one, a command without a valid approval
 // must not reach the filesystem, let alone a shell.
+//
+// The promotion decision runs once per attempted apply and never changes the
+// apply's result: a promotion that cannot be recorded must not turn a successful
+// dev apply into a failed one.
 func NewCommandObjectExecutorApply(
 	stage apply.Stage,
 	componentResolver apply.ComponentResolver,
 	applier apply.Applier,
 	approver apply.Approver,
 	revision apply.Revision,
+	promoter promotion.Promoter,
 	logSamplerFactory log.SamplerFactory,
 ) cdb.CommandObjectExecutorTx {
 	logSampler := logSamplerFactory.Sampler()
@@ -104,6 +110,17 @@ func NewCommandObjectExecutorApply(
 			if err := commandObject.Command.Data.MarshalInto(ctx, &command); err != nil {
 				return nil, nil, errors.Wrapf(ctx, err, "unmarshal apply command failed")
 			}
+			// Logged before Validate, so a command that is later refused is still
+			// logged. This is the line that proves a promotion arrived on sun —
+			// the sun instance consumes the promotion's identifier as its own
+			// event id — and the line that shows which operator command started
+			// the chain on dev.
+			glog.Infof(
+				"consumed apply command '%s' for component '%s' on stage '%s'",
+				commandObject.Command.ID,
+				command.Path,
+				string(stage),
+			)
 			if err := command.Validate(ctx); err != nil {
 				return nil, nil, errors.Wrapf(ctx, err, "validate apply command failed")
 			}
@@ -119,8 +136,27 @@ func NewCommandObjectExecutorApply(
 					command.Path,
 				)
 			}
-			if err := applier.Apply(ctx, component); err != nil {
-				return nil, nil, errors.Wrapf(ctx, err, "apply component '%s' failed", command.Path)
+			applyErr := applier.Apply(ctx, component)
+
+			// The promotion decision runs once per attempted apply, and its
+			// failure is never allowed to change the apply's own result: a
+			// promotion that cannot be recorded must not turn a successful dev
+			// apply into a failed one.
+			if promoErr := promoter.Promote(ctx, component.Path, applyErr); promoErr != nil {
+				glog.V(2).Infof(
+					"record promotion for component %s failed: %v",
+					component.Path,
+					promoErr,
+				)
+			}
+
+			if applyErr != nil {
+				return nil, nil, errors.Wrapf(
+					ctx,
+					applyErr,
+					"apply component '%s' failed",
+					command.Path,
+				)
 			}
 			if logSampler.IsSample() {
 				glog.V(2).Infof("apply component %s completed (sample)", component.Path)
