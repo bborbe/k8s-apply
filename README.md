@@ -188,7 +188,8 @@ component's own target and never rewrites it. The stage decides the arguments: t
 Three refusals are by design and all publish a **Failure** result naming the reason:
 
 - a component whose `apply` recipe invokes `docker` (there is no docker daemon in the pod, and an
-  image build belongs to the release pipeline)
+  image build belongs to the release pipeline). The refusal reads the apply target's own recipe
+  lines only, so a prerequisite that invokes docker is not refused — it fails at apply time instead.
 - a component with no `apply` target at all
 - a component excluded by name. `teamvault` is the one entry: its `apply` target only runs `envsubst`
   and `kubectl apply` over its own manifests, and the TeamVault reads live in its separate,
