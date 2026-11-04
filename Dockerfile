@@ -47,7 +47,6 @@ RUN apk --no-cache add \
         openssh-client \
         tzdata \
         wget \
-        yq \
  && wget -q -O /tmp/kubectl \
         "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
  && echo "${KUBECTL_SHA256}  /tmp/kubectl" | sha256sum -c - \
@@ -78,6 +77,14 @@ LABEL org.opencontainers.image.revision="${BUILD_GIT_COMMIT}"
 # same argument the kubectl checksum block above already makes.
 COPY --from=alpine/helm:3.22.1@sha256:8191701ad1f82ee3695c87211fcbfe6d7b1bb7df92ac1c8de9ccdb0995a6a2c1 /usr/bin/helm /usr/local/bin/helm
 COPY --from=gcr.io/go-containerregistry/crane:v0.22.1@sha256:1f968817b95790bed063f71175aa6b8ff879fa17064020415f3e18bb6e6a36e1 /ko-app/crane /usr/local/bin/crane
+# yq comes from upstream rather than Alpine's package. The package is older
+# (v4.53.3 at the time of writing) and rejects a valid expression the operator's
+# toolchain accepts — `if (.sandbox.domains // {}) | length > 0 then … end` in
+# nuke's agent/Makefile fails there with `lexer: invalid input text`, while
+# v4.54.1 evaluates it. A version skew between the image and the machine that
+# authors the Makefiles turns a working component into a broken one, so the
+# image pins the same release the operator runs.
+COPY --from=mikefarah/yq:4.54.1@sha256:4b3d9475d65571d28cbb19544d3820ec2945e4c8b2f18279394282b8dc3a592e /usr/bin/yq /usr/local/bin/yq
 COPY --from=build /main /main
 COPY --from=build /usr/local/bin/teamvault-cli /usr/local/bin/teamvault-cli
 
