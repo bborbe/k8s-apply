@@ -103,6 +103,35 @@ var _ = Describe("extractRecipe", func() {
 		Expect(found).To(BeTrue())
 		Expect(recipe).To(Equal([]string{"kubectl apply -f x.yaml"}))
 	})
+
+	It("treats a comment on the target line as declaring nothing", func() {
+		// make reads `#` as the start of a comment, so this target has neither
+		// prerequisites nor a recipe and `make apply` would exit 0 doing nothing.
+		for _, content := range []string{
+			"apply: ## help\n\nother:\n\techo hi\n",
+			"apply: # noop\n\nother:\n\techo hi\n",
+		} {
+			recipe, found := extractRecipe(content)
+			Expect(found).To(BeFalse(), content)
+			Expect(recipe).To(BeNil(), content)
+		}
+	})
+
+	It("strips make command prefixes from a one-line recipe", func() {
+		for _, prefix := range []string{"@", "-", "+", "@-"} {
+			recipe, found := extractRecipe("apply: ; " + prefix + "docker build -t x .\n")
+			Expect(found).To(BeTrue(), prefix)
+			Expect(recipe).To(Equal([]string{"docker build -t x ."}), prefix)
+			Expect(runsDocker(recipe)).To(BeTrue(), prefix)
+		}
+	})
+
+	It("reads prerequisites and a one-line recipe together", func() {
+		recipe, found := extractRecipe("apply: dep ; docker build -t x .\n")
+		Expect(found).To(BeTrue())
+		Expect(recipe).To(Equal([]string{"docker build -t x ."}))
+		Expect(runsDocker(recipe)).To(BeTrue())
+	})
 })
 
 var _ = Describe("runsDocker", func() {

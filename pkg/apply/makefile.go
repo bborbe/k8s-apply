@@ -62,12 +62,17 @@ func extractRecipe(content string) (recipe []string, found bool) {
 	// is a recipe line even though it never appears in a tab-indented line, so
 	// it must be visible to runsDocker.
 	declaresPrerequisites := false
-	rest := strings.TrimPrefix(targetLine, applyTarget+":")
+	rest := stripMakeComment(strings.TrimPrefix(targetLine, applyTarget+":"))
 	prerequisites, inlineRecipe, hasInlineRecipe := strings.Cut(rest, ";")
 	declaresPrerequisites = strings.TrimSpace(prerequisites) != ""
 	if hasInlineRecipe {
-		if trimmed := strings.TrimSpace(inlineRecipe); trimmed != "" {
-			recipe = append(recipe, trimmed)
+		// make strips its command prefixes from a one-line recipe exactly as it
+		// does from a tab-indented one. Without this, `apply: ; @docker build .`
+		// reaches runsDocker still carrying the '@' — which is neither the start
+		// of the string nor whitespace — and slips past the refusal.
+		body := strings.TrimLeft(strings.TrimSpace(inlineRecipe), recipeCommandPrefixes)
+		if body != "" {
+			recipe = append(recipe, body)
 		}
 	}
 
@@ -103,6 +108,23 @@ func extractRecipe(content string) (recipe []string, found bool) {
 		recipe = append(recipe, pending.String())
 	}
 	return recipe, declaresPrerequisites || len(recipe) > 0
+}
+
+// stripMakeComment returns s with everything from its first unescaped '#'
+// removed. make treats that character as the start of a comment, so the text
+// after it is never part of the target's prerequisites or recipe — `apply: ##
+// help` declares nothing, and must not be read as a prerequisite list.
+func stripMakeComment(s string) string {
+	for i := 0; i < len(s); i++ {
+		if s[i] != '#' {
+			continue
+		}
+		if i > 0 && s[i-1] == '\\' {
+			continue
+		}
+		return s[:i]
+	}
+	return s
 }
 
 // runsDocker reports whether any recipe line invokes docker.
