@@ -23,6 +23,6 @@ func NewNoopGateway() Gateway {
 
 type noopGateway struct{}
 
-func (noopGateway) Send(_ context.Context, _ string, _ base.EventID) error {
-	return errors.Errorf(context.Background(), "no promotion gateway is configured")
+func (noopGateway) Send(ctx context.Context, _ string, _ base.EventID) error {
+	return errors.Errorf(ctx, "no promotion gateway is configured")
 }

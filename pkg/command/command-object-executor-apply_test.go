@@ -363,14 +363,19 @@ var _ = Describe("CommandObjectExecutorApply", func() {
 			)
 		}
 
+		// The initiator is a credential. It may travel in the gateway header and
+		// nowhere else, so every test that reads a record's contents also asserts
+		// the initiator is absent from it.
 		It("publishes a promote record carrying an identifier the command did not choose", func() {
+			const initiator = "initiator-must-not-leak"
+
 			componentResolver.ResolveReturns(&apply.Component{Path: "a2a-worker-controller"}, nil)
 
 			commandWithID := cdb.CommandObject{
 				SchemaID: apply.SchemaID,
 				Command: base.Command{
 					RequestID: base.NewRequestID(),
-					Initiator: iam.Initiator("test"),
+					Initiator: iam.Initiator(initiator),
 					Operation: command.Operation,
 					ID:        base.EventID("operator-1"),
 					Data:      base.Event{"path": "a2a-worker-controller"},
@@ -387,6 +392,12 @@ var _ = Describe("CommandObjectExecutorApply", func() {
 			Expect(record.Delivery).To(Equal(promotion.DeliveryAccepted))
 			Expect(record.EventID).NotTo(BeEmpty())
 			Expect(record.EventID).NotTo(Equal(base.EventID("operator-1")))
+
+			// Assert the absence of the value, not of a key named "initiator":
+			// a field added under any other name would still leak the credential.
+			serialized, err := json.Marshal(record)
+			Expect(err).To(BeNil())
+			Expect(string(serialized)).NotTo(ContainSubstring(initiator))
 
 			Expect(gateway.SendCallCount()).To(Equal(1))
 			_, sentPath, sentID := gateway.SendArgsForCall(0)

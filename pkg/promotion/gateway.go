@@ -28,6 +28,17 @@ import (
 // It is a constant rather than a literal at the call site so the day the
 // gateway renames the header the change is one line — and so the request-shape
 // test can assert the literal and the constant separately.
+//
+// Two assumptions the caller side makes and this change does not resolve, both
+// answerable in one line here:
+//
+//  1. Only the initiator header is sent. The spec names no other credential; if
+//     the sun gateway turns out to require one, it is a second setting and a
+//     second header, not a change to this constant.
+//  2. The header survives a service-to-service call. If the gateway's auth
+//     middleware overwrites X-Gateway-Initiator, the promotion is attributed to
+//     the wrong caller and nothing in this repository can detect it — the
+//     dev-side record only says the delivery was accepted.
 const InitiatorHeader = "X-Gateway-Initiator"
 
 // NewGateway returns the Gateway that carries a promote verdict to the sun
