@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 Please choose versions by [Semantic Versioning](http://semver.org/).
 
-## Unreleased
+## v0.15.0
 
 - feat: promote a component to sun after its dev apply passes its post-apply health check. A healthy dev apply now issues one apply command for the same component through the sun command gateway, carrying a service-chosen identifier that is recorded on the dev result topic and appears in both the dev and the sun log; a failed apply or a failed health check records an explicit refusal naming sun as withheld, and the gateway is not called at all. The refusal is its own entry (`kind: promotion`, no `operation`, no `success`) so an existing result consumer skips it instead of reading it as a failed apply. Only dev promotes: `SUN_GATEWAY_URL`, `SUN_GATEWAY_INITIATOR`, `SUN_GATEWAY_USER` and `SUN_GATEWAY_PASSWORD` are required on dev only, the credential is sent as HTTP Basic (the initiator header alone is answered with a 307 to Google OAuth), a routable plain-http gateway URL is refused at startup, and the prod approval gate is unchanged
 
