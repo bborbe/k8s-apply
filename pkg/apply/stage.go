@@ -61,6 +61,13 @@ func (s Stage) RequiresApproval() bool {
 	return s == StageProd
 }
 
+// Promotes reports whether a successful, healthy apply on this stage promotes
+// the component to the next stage. Only dev does: sun and prod are never
+// promotion sources.
+func (s Stage) Promotes() bool {
+	return s == StageDev
+}
+
 // Branch is the CQRS topic branch this instance consumes. TopicPrefixFromBranch
 // maps dev to "develop", prod to "master", and passes sun through as "sun".
 //
