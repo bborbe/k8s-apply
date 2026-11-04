@@ -47,6 +47,7 @@ RUN apk --no-cache add \
         openssh-client \
         tzdata \
         wget \
+        yq \
  && wget -q -O /tmp/kubectl \
         "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl" \
  && echo "${KUBECTL_SHA256}  /tmp/kubectl" | sha256sum -c - \
