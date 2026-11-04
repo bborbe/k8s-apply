@@ -41,6 +41,7 @@ ARG KUBECTL_SHA256=8b8f088da2dab964f853b38464033b1be15ede2839eca751482357c45abdd
 RUN apk --no-cache add \
         bash \
         ca-certificates \
+        curl \
         git \
         jq \
         make \

@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 Please choose versions by [Semantic Versioning](http://semver.org/).
 
+## Unreleased
+
+- feat: **ship `curl` in the apply image.** `bborbe/sun`'s `guard-vault-api` probes two URLs with `curl` before applying, and the image had none — so `code=$(curl …) || code=000` read a missing tool as the network-failure sentinel and refused the apply. The image did have a working HTTP client all along (busybox `wget`, which survives `apk del wget` because that removes the package, not the applet — measured returning `302` from teamvault), but the guard is written against `curl` and changing a safety check to suit the image is the wrong direction. Shipping `curl` leaves the guard untouched. Note the silent-failure shape the incident exposed: any tool-based probe that collapses "tool absent" into "endpoint unreachable" reports the wrong cause, whatever client it calls.
+
 ## v0.17.1
 
 - fix: **pin `yq` to upstream v4.54.1 instead of Alpine's package.** The package shipped v4.53.3, which rejects `if (.sandbox.domains // {}) | length > 0 then … end` — a form the operator's v4.54.1 evaluates — so the first `agent` apply that got as far as `render-check` died with `lexer: invalid input text "if (.sandbox.dom…"`. The image now pins the same release as the machine that authors the Makefiles, so a version skew cannot turn a working component into a broken one. Digest-pinned like helm and crane.
