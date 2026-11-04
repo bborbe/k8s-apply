@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 Please choose versions by [Semantic Versioning](http://semver.org/).
 
+## Unreleased
+
+- feat: ship `yq` in the apply image. `nuke`'s `agent` component reads its values files with `yq` (mikefarah v4 syntax: `-r`, `-e`, `to_entries`) in `check-executor-compat` and in a `$(shell …)` at parse time, and refuses to apply when it is absent: `ERROR: EXECUTOR_VERSION=v0.56.0 needs a VAULT_NAME capability check, but 'yq' is not installed.` The first in-cluster `agent` apply after helm, crane and jq were added died here, one prerequisite later than the last one. The Alpine package is mikefarah's v4, which is the syntax the Makefile uses.
+
 ## v0.16.0
 
 - fix: run a component whose apply target is prerequisite-only
