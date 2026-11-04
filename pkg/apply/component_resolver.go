@@ -62,8 +62,9 @@ type Component struct {
 	Path string
 	// Dir is the absolute directory the apply target runs in.
 	Dir string
-	// Recipe is the resolved `apply` recipe, used for the refusal decision and
-	// for the log line.
+	// Recipe records the resolved `apply` recipe lines for diagnostics. It is
+	// empty when the target exists but declares no recipe lines — for example a
+	// prerequisite-only target, which make still runs through its prerequisites.
 	Recipe []string
 }
 
@@ -108,8 +109,8 @@ func (c *componentResolver) Resolve(ctx context.Context, path string) (*Componen
 	if err != nil {
 		return nil, errors.Wrapf(ctx, err, "component '%s' has no Makefile", path)
 	}
-	recipe := extractRecipe(string(content))
-	if len(recipe) == 0 {
+	recipe, found := extractRecipe(string(content))
+	if !found {
 		return nil, errors.Wrapf(ctx, ErrNotApplicable, "component '%s'", path)
 	}
 	if runsDocker(recipe) {

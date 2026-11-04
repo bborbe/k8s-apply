@@ -71,6 +71,53 @@ var _ = Describe("ComponentResolver", func() {
 		Expect(errors.Is(err, apply.ErrNotApplicable)).To(BeTrue())
 	})
 
+	It("resolves a component whose apply target only lists prerequisites", func() {
+		writeMakefile("agent", "apply: dep\n\ndep:\n\ttouch sentinel\n")
+
+		component, err := resolver.Resolve(ctx, "agent")
+
+		Expect(err).To(BeNil())
+		Expect(component).NotTo(BeNil())
+		Expect(component.Path).To(Equal("agent"))
+		Expect(component.Recipe).To(BeEmpty())
+	})
+
+	It("rejects a placeholder apply target that would run nothing", func() {
+		writeMakefile("placeholder", "apply:\n\nother:\n\techo hi\n")
+
+		_, err := resolver.Resolve(ctx, "placeholder")
+
+		Expect(err).NotTo(BeNil())
+		Expect(errors.Is(err, apply.ErrNotApplicable)).To(BeTrue())
+	})
+
+	It("refuses a one-line docker recipe on the apply target line", func() {
+		writeMakefile("onedocker", "apply: ; docker build -t x .\n")
+
+		_, err := resolver.Resolve(ctx, "onedocker")
+
+		Expect(err).NotTo(BeNil())
+		Expect(errors.Is(err, apply.ErrDockerComponent)).To(BeTrue())
+	})
+
+	It("refuses a one-line docker recipe that carries a make prefix", func() {
+		writeMakefile("onedockerprefixed", "apply: ; @docker build -t x .\n")
+
+		_, err := resolver.Resolve(ctx, "onedockerprefixed")
+
+		Expect(err).NotTo(BeNil())
+		Expect(errors.Is(err, apply.ErrDockerComponent)).To(BeTrue())
+	})
+
+	It("refuses a target that declares nothing but a comment", func() {
+		writeMakefile("commented", "apply: ## help\n\nother:\n\techo hi\n")
+
+		_, err := resolver.Resolve(ctx, "commented")
+
+		Expect(err).NotTo(BeNil())
+		Expect(errors.Is(err, apply.ErrNotApplicable)).To(BeTrue())
+	})
+
 	It("refuses a component whose apply target runs docker, naming the reason", func() {
 		writeMakefile("egress-proxy", "apply:\n\tdocker build -t x .\n")
 

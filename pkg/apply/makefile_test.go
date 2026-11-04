@@ -10,13 +10,17 @@ import (
 )
 
 var _ = Describe("extractRecipe", func() {
-	It("returns nil when the target is missing", func() {
-		Expect(extractRecipe("install:\n\tkubectl apply -f x.yaml\n")).To(BeNil())
+	It("returns nil and not-found when the target is missing", func() {
+		recipe, found := extractRecipe("install:\n\tkubectl apply -f x.yaml\n")
+		Expect(found).To(BeFalse())
+		Expect(recipe).To(BeNil())
 	})
 
 	It("returns the recipe lines of the target", func() {
 		content := "apply:\n\tkubectl apply -f a.yaml\n\tkubectl apply -f b.yaml\n"
-		Expect(extractRecipe(content)).To(Equal([]string{
+		recipe, found := extractRecipe(content)
+		Expect(found).To(BeTrue())
+		Expect(recipe).To(Equal([]string{
 			"kubectl apply -f a.yaml",
 			"kubectl apply -f b.yaml",
 		}))
@@ -24,24 +28,32 @@ var _ = Describe("extractRecipe", func() {
 
 	It("stops at the first non-recipe line", func() {
 		content := "apply:\n\tkubectl apply -f a.yaml\n\nother:\n\tdocker build .\n"
-		Expect(extractRecipe(content)).To(Equal([]string{"kubectl apply -f a.yaml"}))
+		recipe, found := extractRecipe(content)
+		Expect(found).To(BeTrue())
+		Expect(recipe).To(Equal([]string{"kubectl apply -f a.yaml"}))
 	})
 
 	It("joins backslash continuations into one logical line", func() {
 		content := "apply:\n\tteamvault-cli config parse \\\n\t\t--file x --out y\n"
-		Expect(extractRecipe(content)).To(Equal([]string{
+		recipe, found := extractRecipe(content)
+		Expect(found).To(BeTrue())
+		Expect(recipe).To(Equal([]string{
 			"teamvault-cli config parse  \t--file x --out y",
 		}))
 	})
 
 	It("does not match a target whose name merely starts with the target", func() {
 		content := "apply-all:\n\tdocker build .\n"
-		Expect(extractRecipe(content)).To(BeNil())
+		recipe, found := extractRecipe(content)
+		Expect(found).To(BeFalse())
+		Expect(recipe).To(BeNil())
 	})
 
 	It("strips make's command prefixes", func() {
 		content := "apply:\n\t@echo hi\n\t-docker build .\n\t@-kubectl apply -f x.yaml\n\t+docker push x\n\t-@docker build .\n"
-		Expect(extractRecipe(content)).To(Equal([]string{
+		recipe, found := extractRecipe(content)
+		Expect(found).To(BeTrue())
+		Expect(recipe).To(Equal([]string{
 			"echo hi",
 			"docker build .",
 			"kubectl apply -f x.yaml",
@@ -54,7 +66,71 @@ var _ = Describe("extractRecipe", func() {
 		// The `-` here is the shell flag for `docker build`, not make's
 		// ignore-errors marker, so it must survive.
 		content := "apply:\n\tdocker build \\\n\t-t x .\n"
-		Expect(extractRecipe(content)).To(Equal([]string{"docker build  -t x ."}))
+		recipe, found := extractRecipe(content)
+		Expect(found).To(BeTrue())
+		Expect(recipe).To(Equal([]string{"docker build  -t x ."}))
+	})
+
+	It("reports a prerequisite-only target as found with an empty recipe", func() {
+		content := "apply: dep\n\ndep:\n\ttouch sentinel\n"
+		recipe, found := extractRecipe(content)
+		Expect(found).To(BeTrue())
+		Expect(recipe).To(BeEmpty())
+	})
+
+	It("reports a placeholder target with no prerequisites and no recipe as not found", func() {
+		content := "apply:\n\nother:\n\techo hi\n"
+		recipe, found := extractRecipe(content)
+		Expect(found).To(BeFalse())
+		Expect(recipe).To(BeNil())
+	})
+
+	It("reports a missing target as not found", func() {
+		recipe, found := extractRecipe("install:\n\techo hi\n")
+		Expect(found).To(BeFalse())
+		Expect(recipe).To(BeNil())
+	})
+
+	It("reads a one-line recipe after the semicolon so docker is still refused", func() {
+		recipe, found := extractRecipe("apply: ; docker build -t x .\n")
+		Expect(found).To(BeTrue())
+		Expect(recipe).To(Equal([]string{"docker build -t x ."}))
+		Expect(runsDocker(recipe)).To(BeTrue())
+	})
+
+	It("reads a non-docker one-line recipe after the semicolon", func() {
+		recipe, found := extractRecipe("apply: ; kubectl apply -f x.yaml\n")
+		Expect(found).To(BeTrue())
+		Expect(recipe).To(Equal([]string{"kubectl apply -f x.yaml"}))
+	})
+
+	It("treats a comment on the target line as declaring nothing", func() {
+		// make reads `#` as the start of a comment, so this target has neither
+		// prerequisites nor a recipe and `make apply` would exit 0 doing nothing.
+		for _, content := range []string{
+			"apply: ## help\n\nother:\n\techo hi\n",
+			"apply: # noop\n\nother:\n\techo hi\n",
+		} {
+			recipe, found := extractRecipe(content)
+			Expect(found).To(BeFalse(), content)
+			Expect(recipe).To(BeNil(), content)
+		}
+	})
+
+	It("strips make command prefixes from a one-line recipe", func() {
+		for _, prefix := range []string{"@", "-", "+", "@-"} {
+			recipe, found := extractRecipe("apply: ; " + prefix + "docker build -t x .\n")
+			Expect(found).To(BeTrue(), prefix)
+			Expect(recipe).To(Equal([]string{"docker build -t x ."}), prefix)
+			Expect(runsDocker(recipe)).To(BeTrue(), prefix)
+		}
+	})
+
+	It("reads prerequisites and a one-line recipe together", func() {
+		recipe, found := extractRecipe("apply: dep ; docker build -t x .\n")
+		Expect(found).To(BeTrue())
+		Expect(recipe).To(Equal([]string{"docker build -t x ."}))
+		Expect(runsDocker(recipe)).To(BeTrue())
 	})
 })
 

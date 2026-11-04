@@ -42,6 +42,7 @@ RUN apk --no-cache add \
         bash \
         ca-certificates \
         git \
+        jq \
         make \
         openssh-client \
         tzdata \
@@ -67,6 +68,15 @@ LABEL org.opencontainers.image.version="${BUILD_GIT_VERSION}"
 LABEL org.opencontainers.image.created="${BUILD_DATE}"
 LABEL org.opencontainers.image.revision="${BUILD_GIT_COMMIT}"
 
+# helm and crane ship in the image because a component's apply prerequisites
+# render and upgrade a release through helm, and crane copies an image between
+# registries from inside the pod, where there is no Docker daemon. jq, added to
+# the apk list above, builds the arguments for that helm upgrade. Both
+# third-party references are pinned by manifest digest, not by a tag: a tag is
+# mutable, so a retagged upstream would silently build different content — the
+# same argument the kubectl checksum block above already makes.
+COPY --from=alpine/helm:3.22.1@sha256:8191701ad1f82ee3695c87211fcbfe6d7b1bb7df92ac1c8de9ccdb0995a6a2c1 /usr/bin/helm /usr/local/bin/helm
+COPY --from=gcr.io/go-containerregistry/crane:v0.22.1@sha256:1f968817b95790bed063f71175aa6b8ff879fa17064020415f3e18bb6e6a36e1 /ko-app/crane /usr/local/bin/crane
 COPY --from=build /main /main
 COPY --from=build /usr/local/bin/teamvault-cli /usr/local/bin/teamvault-cli
 
