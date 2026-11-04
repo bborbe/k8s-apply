@@ -110,6 +110,8 @@ Configuration is managed through environment variables. See `example.env` for de
 | `BATCH_SIZE` | Kafka batch consume size | `1` |
 | `STAGE` | Stage whose apply commands this instance consumes (`dev` or `sun`) | `dev` |
 | `REPO_DIR` | Path to the deploy repo checkout the apply targets run in | `/repo` |
+| `SUN_GATEWAY_URL` | Sun command gateway base URL; required on `dev`, where a healthy apply promotes the component through it | (empty on `sun` and `prod`) |
+| `SUN_GATEWAY_INITIATOR` | Initiator the sun command gateway attributes the promotion to | (empty on `sun` and `prod`) |
 | `TEAMVAULT_URL` | TeamVault base URL, passed through to `teamvault-cli` | (from Secret) |
 | `TEAMVAULT_USER` | TeamVault user for this stage | (from Secret) |
 | `TEAMVAULT_PASS` | TeamVault password for this stage | (from Secret) |

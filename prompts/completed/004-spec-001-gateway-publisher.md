@@ -1,5 +1,6 @@
 ---
-status: approved
+status: completed
+summary: Implemented the HTTP gateway that carries a promote verdict to the sun command gateway as one POST whose path ends in the service-chosen identifier, with the delivery outcome reported in the record
 spec: [001-health-gated-promotion]
 created: "2026-11-03T22:30:50Z"
 queued: "2026-11-03T23:05:51Z"

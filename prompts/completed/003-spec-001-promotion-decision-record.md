@@ -1,5 +1,6 @@
 ---
-status: approved
+status: completed
+summary: Added the promotion decision as one entry point yielding promote or withhold per attempted dev apply, published as its own record kind on the result topic, with the gateway seam left to a noop that refuses
 spec: [001-health-gated-promotion]
 created: "2026-11-03T22:30:50Z"
 queued: "2026-11-03T23:05:51Z"

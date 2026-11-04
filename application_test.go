@@ -21,3 +21,32 @@ func TestApplicationStageTags(t *testing.T) {
 		t.Errorf("Stage env tag = %q, want %q", got, "STAGE")
 	}
 }
+
+// TestCreateGateway sets the struct fields directly and never exercises the
+// arg/env parser, so a mistyped tag would ship undetected and a dev pod would
+// crash-loop on an env var nobody set.
+func TestApplicationSunGatewayTags(t *testing.T) {
+	tests := []struct {
+		field string
+		arg   string
+		env   string
+	}{
+		{field: "SunGatewayURL", arg: "sun-gateway-url", env: "SUN_GATEWAY_URL"},
+		{field: "SunGatewayInitiator", arg: "sun-gateway-initiator", env: "SUN_GATEWAY_INITIATOR"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.field, func(t *testing.T) {
+			field, ok := reflect.TypeOf(application{}).FieldByName(test.field)
+			if !ok {
+				t.Fatalf("application has no %s field", test.field)
+			}
+			if got := field.Tag.Get("arg"); got != test.arg {
+				t.Errorf("%s arg tag = %q, want %q", test.field, got, test.arg)
+			}
+			if got := field.Tag.Get("env"); got != test.env {
+				t.Errorf("%s env tag = %q, want %q", test.field, got, test.env)
+			}
+		})
+	}
+}

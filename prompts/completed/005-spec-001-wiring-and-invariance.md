@@ -1,5 +1,6 @@
 ---
-status: approved
+status: completed
+summary: Wired the sun gateway as a dev-only startup requirement, logged the consumed command identifier on both sides of the crossing, and pinned the prod path with invariance tests
 spec: [001-health-gated-promotion]
 created: "2026-11-03T22:30:50Z"
 queued: "2026-11-03T23:05:51Z"
