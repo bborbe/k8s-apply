@@ -54,6 +54,8 @@ type application struct {
 	AttentionToken      string            `required:"false" arg:"attention-token"       env:"ATTENTION_TOKEN"       usage:"bearer token for the attention store's gated listener"                                                  display:"length"`
 	SunGatewayURL       string            `required:"false" arg:"sun-gateway-url"       env:"SUN_GATEWAY_URL"       usage:"sun command gateway base URL; required on dev, where a healthy apply promotes the component through it"`
 	SunGatewayInitiator string            `required:"false" arg:"sun-gateway-initiator" env:"SUN_GATEWAY_INITIATOR" usage:"initiator the sun command gateway attributes the promotion to"                                          display:"length"`
+	SunGatewayUser      string            `required:"false" arg:"sun-gateway-user"      env:"SUN_GATEWAY_USER"      usage:"user the sun command gateway authenticates the promotion as; required on dev"`
+	SunGatewayPassword  string            `required:"false" arg:"sun-gateway-password"  env:"SUN_GATEWAY_PASSWORD"  usage:"password for the sun command gateway user; required on dev"                                             display:"length"`
 	RepoDir             string            `required:"true"  arg:"repo-dir"              env:"REPO_DIR"              usage:"path to the deploy repo checkout this stage applies from"                                                                default:"/repo"`
 	Namespace           string            `required:"false" arg:"namespace"             env:"NAMESPACE"             usage:"namespace whose Deployments the post-apply health check reads; defaults to the pod's own"`
 	HealthTimeout       time.Duration     `required:"true"  arg:"health-timeout"        env:"HEALTH_TIMEOUT"        usage:"how long a Deployment may take to become healthy after an apply before it is rolled back"                                default:"5m"`
@@ -189,9 +191,29 @@ func (a *application) createGateway(
 			string(stage),
 		)
 	}
+	// The initiator header is not an authentication mechanism: sun's gateway
+	// answers an unauthenticated command with a 307 to Google OAuth, measured
+	// 2026-11-04. The credential is what gets the request through; the header is
+	// what the gateway attributes it to.
+	if a.SunGatewayUser == "" {
+		return nil, errors.Errorf(
+			ctx,
+			"stage '%s' promotes but SUN_GATEWAY_USER is empty",
+			string(stage),
+		)
+	}
+	if a.SunGatewayPassword == "" {
+		return nil, errors.Errorf(
+			ctx,
+			"stage '%s' promotes but SUN_GATEWAY_PASSWORD is empty",
+			string(stage),
+		)
+	}
 	return promotion.NewGateway(
 		a.SunGatewayURL,
 		iam.Initiator(a.SunGatewayInitiator),
+		a.SunGatewayUser,
+		a.SunGatewayPassword,
 		&http.Client{Timeout: 10 * time.Second},
 	), nil
 }

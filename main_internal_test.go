@@ -114,6 +114,8 @@ func TestCreateGateway(t *testing.T) {
 		stage     apply.Stage
 		url       string
 		initiator string
+		user      string
+		password  string
 		wantErr   string
 	}{
 		{
@@ -126,18 +128,24 @@ func TestCreateGateway(t *testing.T) {
 			stage:     apply.StageDev,
 			url:       "https://gateway.example.com",
 			initiator: "k8s-apply",
+			user:      "api",
+			password:  "secret",
 		},
 		{
 			name:      "dev with an in-cluster http service is accepted",
 			stage:     apply.StageDev,
 			url:       "http://command.sun.svc.cluster.local:8080",
 			initiator: "k8s-apply",
+			user:      "api",
+			password:  "secret",
 		},
 		{
 			name:      "dev with plain http to a routable host is refused",
 			stage:     apply.StageDev,
 			url:       "http://gateway.example.com:8080",
 			initiator: "k8s-apply",
+			user:      "api",
+			password:  "secret",
 			wantErr:   "in clear text",
 		},
 		{
@@ -145,6 +153,22 @@ func TestCreateGateway(t *testing.T) {
 			stage:   apply.StageDev,
 			url:     "https://gateway.example.com",
 			wantErr: "SUN_GATEWAY_INITIATOR is empty",
+		},
+		{
+			name:      "dev without a credential user fails closed",
+			stage:     apply.StageDev,
+			url:       "https://gateway.example.com",
+			initiator: "k8s-apply",
+			password:  "secret",
+			wantErr:   "SUN_GATEWAY_USER is empty",
+		},
+		{
+			name:      "dev without a credential password fails closed",
+			stage:     apply.StageDev,
+			url:       "https://gateway.example.com",
+			initiator: "k8s-apply",
+			user:      "api",
+			wantErr:   "SUN_GATEWAY_PASSWORD is empty",
 		},
 		{
 			name:  "sun needs no gateway",
@@ -162,6 +186,8 @@ func TestCreateGateway(t *testing.T) {
 				Stage:               string(test.stage),
 				SunGatewayURL:       test.url,
 				SunGatewayInitiator: test.initiator,
+				SunGatewayUser:      test.user,
+				SunGatewayPassword:  test.password,
 			}
 
 			gateway, err := app.createGateway(ctx, test.stage)

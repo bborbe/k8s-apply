@@ -33,6 +33,8 @@ func TestApplicationSunGatewayTags(t *testing.T) {
 	}{
 		{field: "SunGatewayURL", arg: "sun-gateway-url", env: "SUN_GATEWAY_URL"},
 		{field: "SunGatewayInitiator", arg: "sun-gateway-initiator", env: "SUN_GATEWAY_INITIATOR"},
+		{field: "SunGatewayUser", arg: "sun-gateway-user", env: "SUN_GATEWAY_USER"},
+		{field: "SunGatewayPassword", arg: "sun-gateway-password", env: "SUN_GATEWAY_PASSWORD"},
 	}
 
 	for _, test := range tests {

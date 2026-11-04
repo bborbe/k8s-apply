@@ -24,6 +24,8 @@ var _ = Describe("Gateway", func() {
 	const (
 		componentPath = "a2a-worker-controller"
 		initiator     = "k8s-apply-dev"
+		user          = "api"
+		password      = "credential-must-not-leak"
 		eventID       = base.EventID("11111111-1111-1111-1111-111111111111")
 	)
 
@@ -35,6 +37,9 @@ var _ = Describe("Gateway", func() {
 	var receivedPath string
 	var receivedContentType string
 	var receivedInitiator string
+	var receivedUser string
+	var receivedPassword string
+	var receivedHasBasicAuth bool
 	var receivedBody []byte
 	var responseStatus int
 	var responseBody string
@@ -45,6 +50,9 @@ var _ = Describe("Gateway", func() {
 		receivedPath = ""
 		receivedContentType = ""
 		receivedInitiator = ""
+		receivedUser = ""
+		receivedPassword = ""
+		receivedHasBasicAuth = false
 		receivedBody = nil
 		responseStatus = http.StatusOK
 		responseBody = ""
@@ -54,6 +62,7 @@ var _ = Describe("Gateway", func() {
 			receivedPath = r.URL.Path
 			receivedContentType = r.Header.Get("Content-Type")
 			receivedInitiator = r.Header.Get("X-Gateway-Initiator")
+			receivedUser, receivedPassword, receivedHasBasicAuth = r.BasicAuth()
 			raw, err := io.ReadAll(r.Body)
 			Expect(err).To(BeNil())
 			receivedBody = raw
@@ -65,6 +74,8 @@ var _ = Describe("Gateway", func() {
 		gateway = promotion.NewGateway(
 			server.URL,
 			iam.Initiator(initiator),
+			user,
+			password,
 			&http.Client{Timeout: 10 * time.Second},
 		)
 	})
@@ -80,12 +91,34 @@ var _ = Describe("Gateway", func() {
 		// asserted separately below, so a typo in either is caught.
 		Expect(receivedInitiator).To(Equal(initiator))
 
+		// The initiator header alone does not authenticate: sun's gateway answers
+		// it with a 307 to Google OAuth. The Basic credential is what gets the
+		// request through, so it is asserted on the wire, not merely configured.
+		Expect(receivedHasBasicAuth).To(BeTrue())
+		Expect(receivedUser).To(Equal(user))
+		Expect(receivedPassword).To(Equal(password))
+
 		// Decoding into a map and asserting the single key is what pins "the
 		// promotion command carries only the component path".
 		var decoded map[string]any
 		Expect(json.Unmarshal(receivedBody, &decoded)).To(Succeed())
 		Expect(decoded).To(HaveLen(1))
 		Expect(decoded).To(HaveKeyWithValue("path", componentPath))
+	})
+
+	It("sends no credential when none is configured", func() {
+		gateway = promotion.NewGateway(
+			server.URL,
+			iam.Initiator(initiator),
+			"",
+			"",
+			&http.Client{Timeout: 10 * time.Second},
+		)
+
+		Expect(gateway.Send(ctx, componentPath, eventID)).To(Succeed())
+
+		Expect(receivedHasBasicAuth).To(BeFalse())
+		Expect(receivedInitiator).To(Equal(initiator))
 	})
 
 	It("names the initiator header the gateway actually reads", func() {
@@ -105,6 +138,7 @@ var _ = Describe("Gateway", func() {
 		Expect(err).NotTo(BeNil())
 		Expect(err.Error()).To(ContainSubstring("500"))
 		Expect(err.Error()).NotTo(ContainSubstring(initiator))
+		Expect(err.Error()).NotTo(ContainSubstring(password))
 	})
 
 	It("reports a 401 by status and never by initiator", func() {
@@ -115,6 +149,7 @@ var _ = Describe("Gateway", func() {
 		Expect(err).NotTo(BeNil())
 		Expect(err.Error()).To(ContainSubstring("401"))
 		Expect(err.Error()).NotTo(ContainSubstring(initiator))
+		Expect(err.Error()).NotTo(ContainSubstring(password))
 	})
 
 	It("reports an unreachable gateway by component", func() {
@@ -125,5 +160,6 @@ var _ = Describe("Gateway", func() {
 		Expect(err).NotTo(BeNil())
 		Expect(err.Error()).To(ContainSubstring(componentPath))
 		Expect(err.Error()).NotTo(ContainSubstring(initiator))
+		Expect(err.Error()).NotTo(ContainSubstring(password))
 	})
 })

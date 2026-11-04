@@ -29,28 +29,42 @@ import (
 // gateway renames the header the change is one line — and so the request-shape
 // test can assert the literal and the constant separately.
 //
-// Two assumptions the caller side makes and this change does not resolve, both
-// answerable in one line here:
+// The header is not by itself an authentication mechanism. Measured against
+// sun's live gateway on 2026-11-04: an unauthenticated POST to
+// /api/1.0/command/k8s-apply-v1/apply/<id> is answered 307 to Google OAuth,
+// with or without this header set. The gateway's own configuration shows why —
+// it fronts a browser OAuth flow (GOOGLE_CLIENT_ID, GOOGLE_REDIRECT_URL) and
+// separately carries a non-human identity named "api" in ALLOWED_USERS, backed
+// by a username/password directory. So the caller sends both: HTTP Basic for
+// the credential, and this header for the identity the gateway attributes the
+// promotion to.
 //
-//  1. Only the initiator header is sent. The spec names no other credential; if
-//     the sun gateway turns out to require one, it is a second setting and a
-//     second header, not a change to this constant.
-//  2. The header survives a service-to-service call. If the gateway's auth
-//     middleware overwrites X-Gateway-Initiator, the promotion is attributed to
-//     the wrong caller and nothing in this repository can detect it — the
-//     dev-side record only says the delivery was accepted.
+// One assumption remains unresolved and cannot be tested from here: whether the
+// gateway's auth middleware overwrites X-Gateway-Initiator on a service-to-
+// service call. If it does, the promotion is attributed to the wrong caller and
+// nothing in this repository can detect it — the dev-side record only says the
+// delivery was accepted.
 const InitiatorHeader = "X-Gateway-Initiator"
 
 // NewGateway returns the Gateway that carries a promote verdict to the sun
 // command gateway.
 //
-// initiator is the identity the gateway attributes the promotion to. It travels
-// in a header and nowhere else: never in the URL, never in the record, never in
-// a log line or an error text.
-func NewGateway(baseURL string, initiator iam.Initiator, client *http.Client) Gateway {
+// initiator is the identity the gateway attributes the promotion to; user and
+// password are the credential it authenticates with. Both travel in request
+// headers and nowhere else: never in the URL, never in the record, never in a
+// log line or an error text.
+func NewGateway(
+	baseURL string,
+	initiator iam.Initiator,
+	user string,
+	password string,
+	client *http.Client,
+) Gateway {
 	return &gateway{
 		baseURL:   strings.TrimRight(baseURL, "/"),
 		initiator: initiator,
+		user:      user,
+		password:  password,
 		client:    client,
 	}
 }
@@ -58,6 +72,8 @@ func NewGateway(baseURL string, initiator iam.Initiator, client *http.Client) Ga
 type gateway struct {
 	baseURL   string
 	initiator iam.Initiator
+	user      string
+	password  string
 	client    *http.Client
 }
 
@@ -101,6 +117,11 @@ func (g *gateway) Send(
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(InitiatorHeader, g.initiator.String())
+	// SetBasicAuth also sets the header, so a caller that configured no
+	// credential sends none rather than an empty one.
+	if g.user != "" {
+		req.SetBasicAuth(g.user, g.password)
+	}
 
 	resp, err := g.client.Do(req)
 	if err != nil {
