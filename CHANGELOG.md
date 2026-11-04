@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 Please choose versions by [Semantic Versioning](http://semver.org/).
 
-## Unreleased
+## v0.16.0
 
 - fix: run a component whose apply target is prerequisite-only
 - feat: ship helm, crane and jq in the apply image
