@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 Please choose versions by [Semantic Versioning](http://semver.org/).
 
-## Unreleased
+## v0.18.0
 
 - feat: **ship `curl` in the apply image.** `bborbe/sun`'s `guard-vault-api` probes two URLs with `curl` before applying, and the image had none — so `code=$(curl …) || code=000` read a missing tool as the network-failure sentinel and refused the apply. The image did have a working HTTP client all along (busybox `wget`, which survives `apk del wget` because that removes the package, not the applet — measured returning `302` from teamvault), but the guard is written against `curl` and changing a safety check to suit the image is the wrong direction. Shipping `curl` leaves the guard untouched. Note the silent-failure shape the incident exposed: any tool-based probe that collapses "tool absent" into "endpoint unreachable" reports the wrong cause, whatever client it calls.
 
