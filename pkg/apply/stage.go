@@ -12,8 +12,8 @@ import (
 )
 
 // Stage names the cluster a service instance deploys. One instance is one
-// stage is one deploy-repo checkout: every branch, guard and approval decision
-// is derived from this value rather than hard-coded.
+// stage is one deploy-repo checkout: every branch and guard decision is derived
+// from this value rather than hard-coded.
 type Stage string
 
 const (
@@ -50,15 +50,6 @@ func (s Stage) ApplyBranch() string {
 // it to make without editing this method.
 func (s Stage) RequiresBranchArgument() bool {
 	return s.ApplyBranch() != ""
-}
-
-// RequiresApproval reports whether the stage gates on a recorded operator
-// approval.
-//
-// Only prod does, because prod is the stage where a wrong apply is not
-// recoverable by re-applying. Dev and sun promote on their own.
-func (s Stage) RequiresApproval() bool {
-	return s == StageProd
 }
 
 // Promotes reports whether a successful, healthy apply on this stage promotes

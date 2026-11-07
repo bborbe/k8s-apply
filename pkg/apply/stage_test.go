@@ -20,18 +20,21 @@ var _ = Describe("Stage", func() {
 			stage apply.Stage,
 			applyBranch string,
 			requiresBranchArgument bool,
-			requiresApproval bool,
 			requiresMasterHead bool,
 			branch base.Branch,
 		) {
 			Expect(stage.ApplyBranch()).To(Equal(applyBranch))
 			Expect(stage.RequiresBranchArgument()).To(Equal(requiresBranchArgument))
-			Expect(stage.RequiresApproval()).To(Equal(requiresApproval))
 			Expect(stage.RequiresMasterHead()).To(Equal(requiresMasterHead))
 			Expect(stage.Branch()).To(Equal(branch))
 		},
-		Entry("dev", apply.StageDev, "dev", true, false, false, base.Branch("dev")),
-		Entry("sun", apply.StageSun, "", false, false, true, base.Branch("sun")),
+		Entry("dev", apply.StageDev, "dev", true, false, base.Branch("dev")),
+		Entry("sun", apply.StageSun, "", false, true, base.Branch("sun")),
+		// prod applies master while consuming the prod topic. Those two values
+		// differing is the point: ApplyBranch is what make receives, Branch is
+		// what selects the CQRS topic, and collapsing them would stay hidden
+		// until one of them changed.
+		Entry("prod", apply.StageProd, "master", true, false, base.Branch("prod")),
 	)
 
 	// This is a forward-looking guard. For the current dev/sun set the
