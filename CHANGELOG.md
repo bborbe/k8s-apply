@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 Please choose versions by [Semantic Versioning](http://semver.org/).
 
-## Unreleased
+## v0.19.0
 
 - feat: **the merge to the prod branch is the approval — the attention-store gate is gone.** `Stage.RequiresApproval()`, the `Approver` interface with its attention-store implementation, the command's `approval` payload, the `Revision` commit check that payload fed, and the `ATTENTION_URL` / `ATTENTION_TOKEN` settings are all removed. Prod previously refused every apply without a recorded attention card (`no approval carried`), which made an already-merged change undeployable by a session — measured 2026-11-07 on `task/recurring-schedules`, refused with requestID `89b4ac44-4bb9-4257-abc7-7099755133c7` even though bborbe/nuke#1103 had merged. A stage applies what its pod cloned, so the branch it clones is the gate, and the payload no longer carries a second gate it could assert for itself. Note what this drops alongside what it gains: an operator can no longer hold a single prod apply behind a card — an apply is gated only by what reached master.
 
