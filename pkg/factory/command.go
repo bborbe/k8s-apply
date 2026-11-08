@@ -40,9 +40,6 @@ func CQRSBranch(stage apply.Stage) base.Branch {
 // as a failure rather than be dropped silently, because the only caller is an
 // operator waiting for a result.
 //
-// The approver is consulted inside the executor, before any make invocation, so
-// a stage that requires an approval cannot reach a shell without one.
-//
 // The applier is health-checked: an apply that lands but leaves a Deployment
 // unhealthy within healthCheckTimeout is rolled back to its pre-apply images.
 func CreateCommandConsumer(
@@ -51,7 +48,6 @@ func CreateCommandConsumer(
 	db libkv.DB,
 	stage apply.Stage,
 	repoDir string,
-	approver apply.Approver,
 	deploymentClient apply.DeploymentClient,
 	healthCheckTimeout time.Duration,
 	gateway promotion.Gateway,
@@ -88,8 +84,6 @@ func CreateCommandConsumer(
 				stage,
 				apply.NewComponentResolver(repoDir),
 				applier,
-				approver,
-				apply.NewGitRevision(repoDir),
 				promoter,
 				logSamplerFactory,
 			),

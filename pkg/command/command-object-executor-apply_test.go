@@ -26,8 +26,6 @@ var _ = Describe("CommandObjectExecutorApply", func() {
 	var ctx context.Context
 	var componentResolver *mocks.ComponentResolver
 	var applier *mocks.Applier
-	var approver *mocks.Approver
-	var revision *mocks.Revision
 	var promoter *mocks.PromotionPromoter
 	var executor cdb.CommandObjectExecutorTx
 
@@ -35,15 +33,11 @@ var _ = Describe("CommandObjectExecutorApply", func() {
 		ctx = context.Background()
 		componentResolver = &mocks.ComponentResolver{}
 		applier = &mocks.Applier{}
-		approver = &mocks.Approver{}
-		revision = &mocks.Revision{}
 		promoter = &mocks.PromotionPromoter{}
 		executor = command.NewCommandObjectExecutorApply(
 			apply.StageDev,
 			componentResolver,
 			applier,
-			approver,
-			revision,
 			promoter,
 			log.DefaultSamplerFactory,
 		)
@@ -86,112 +80,23 @@ var _ = Describe("CommandObjectExecutorApply", func() {
 		Expect(appliedComponent).To(Equal(component))
 	})
 
-	// The whole point of the prod gate is that a refused command never reaches
-	// the filesystem, let alone a shell. Asserting only "an error came back"
-	// would pass for a service that resolved, resolved-and-failed, or applied
-	// and then reported a failure.
-	It("consults the approver before resolving, and applies nothing when it refuses", func() {
-		approver.ApproveReturns(errors.Errorf(ctx, "no approval carried"))
-
-		_, _, err := executor.HandleCommand(
-			ctx,
-			nil,
-			commandObject(base.Event{"path": "trading/core/symbol"}),
-		)
-
-		Expect(err).NotTo(BeNil())
-		Expect(err.Error()).To(ContainSubstring("no approval carried"))
-		Expect(approver.ApproveCallCount()).To(Equal(1))
-		Expect(componentResolver.ResolveCallCount()).To(Equal(0))
-		Expect(applier.ApplyCallCount()).To(Equal(0))
-	})
-
-	It("passes the stage and the command's path to the approver", func() {
+	// The gate is the branch, so a command on this stage's topic is applied on
+	// Validate alone. There is no approval to consult and no revision to check:
+	// the payload cannot assert a second gate, and nothing in the executor reads
+	// one. Asserting the counts is what keeps that true if a gate is re-added.
+	It("applies a command that carries no approval field", func() {
 		componentResolver.ResolveReturns(&apply.Component{Path: "alertmanager"}, nil)
 
-		_, _, err := executor.HandleCommand(
-			ctx,
-			nil,
-			commandObject(base.Event{"path": "alertmanager"}),
-		)
-		Expect(err).To(BeNil())
-
-		_, stage, approved := approver.ApproveArgsForCall(0)
-		Expect(stage).To(Equal(apply.StageDev))
-		Expect(approved.Path).To(Equal("alertmanager"))
-	})
-
-	// Fail-closed wiring: a prod deployment that forgot to configure an
-	// approver must refuse every apply, not silently skip the gate.
-	It("refuses a prod apply when only the noop approver is wired", func() {
-		prodExecutor := command.NewCommandObjectExecutorApply(
-			apply.StageProd,
-			componentResolver,
-			applier,
-			apply.NewNoopApprover(),
-			revision,
-			promoter,
-			log.DefaultSamplerFactory,
-		)
-
-		_, _, err := prodExecutor.HandleCommand(
+		eventID, _, err := executor.HandleCommand(
 			ctx,
 			nil,
 			commandObject(base.Event{"path": "alertmanager"}),
 		)
 
-		Expect(err).NotTo(BeNil())
-		Expect(err.Error()).To(ContainSubstring("no approver is configured"))
-		Expect(applier.ApplyCallCount()).To(Equal(0))
-	})
-
-	// The approval names a commit; make runs against whatever the pod cloned.
-	// Without this check the binding is paperwork — the hash can say commit A
-	// while the checkout sits at commit B.
-	It("refuses when the checkout is not the approved commit", func() {
-		approver.ApproveReturns(nil)
-		revision.VerifyReturns(errors.Errorf(ctx, "checkout is at b, the approval covers a"))
-
-		prodExecutor := command.NewCommandObjectExecutorApply(
-			apply.StageProd,
-			componentResolver,
-			applier,
-			approver,
-			revision,
-			promoter,
-			log.DefaultSamplerFactory,
-		)
-		raw, err := json.Marshal(map[string]any{
-			"id":            "abc",
-			"component":     "alertmanager",
-			"commit":        "aaa",
-			"action_sha256": apply.ActionHash(apply.StageProd, "alertmanager", "aaa"),
-		})
 		Expect(err).To(BeNil())
-
-		_, _, err = prodExecutor.HandleCommand(
-			ctx,
-			nil,
-			commandObject(base.Event{"path": "alertmanager", "approval": json.RawMessage(raw)}),
-		)
-
-		Expect(err).NotTo(BeNil())
-		Expect(err.Error()).To(ContainSubstring("checkout is at b"))
-		Expect(revision.VerifyCallCount()).To(Equal(1))
-		Expect(componentResolver.ResolveCallCount()).To(Equal(0))
-		Expect(applier.ApplyCallCount()).To(Equal(0))
-	})
-
-	It("does not consult the revision on a stage that needs no approval", func() {
-		componentResolver.ResolveReturns(&apply.Component{Path: "alertmanager"}, nil)
-
-		_, _, err := executor.HandleCommand(
-			ctx,
-			nil,
-			commandObject(base.Event{"path": "alertmanager"}),
-		)
-		Expect(err).To(BeNil())
-		Expect(revision.VerifyCallCount()).To(Equal(0))
+		Expect(eventID.String()).To(Equal("alertmanager"))
+		Expect(componentResolver.ResolveCallCount()).To(Equal(1))
+		Expect(applier.ApplyCallCount()).To(Equal(1))
 	})
 
 	It("fails without resolving when the command carries no path", func() {
@@ -302,19 +207,6 @@ var _ = Describe("CommandObjectExecutorApply", func() {
 			Expect(promoter.PromoteCallCount()).To(Equal(0))
 		})
 
-		It("decides nothing when the approver refuses", func() {
-			approver.ApproveReturns(errors.Errorf(ctx, "no approval carried"))
-
-			_, _, err := executor.HandleCommand(
-				ctx,
-				nil,
-				commandObject(base.Event{"path": "a2a-worker-controller"}),
-			)
-
-			Expect(err).NotTo(BeNil())
-			Expect(promoter.PromoteCallCount()).To(Equal(0))
-		})
-
 		// The apply's own result must survive a promotion that could not be
 		// recorded: a healthy dev apply that failed to record a promotion is
 		// still a healthy dev apply.
@@ -351,8 +243,6 @@ var _ = Describe("CommandObjectExecutorApply", func() {
 				apply.StageDev,
 				componentResolver,
 				applier,
-				approver,
-				revision,
 				promotion.NewPromoter(
 					apply.StageDev,
 					gateway,
@@ -467,8 +357,8 @@ var _ = Describe("CommandObjectExecutorApply", func() {
 		})
 	})
 
-	// Prod must not move: it publishes no promotion entry for any apply, and the
-	// approval gate keeps its order and its text. These tests fail if either
+	// Prod must not move: it publishes no promotion entry for any apply, and it
+	// applies a command carrying no approval at all. These tests fail if either
 	// changes.
 	Describe("prod invariance", func() {
 		var gateway *mocks.PromotionGateway
@@ -477,31 +367,14 @@ var _ = Describe("CommandObjectExecutorApply", func() {
 		BeforeEach(func() {
 			gateway = &mocks.PromotionGateway{}
 			publisher = &mocks.PromotionRecordPublisher{}
-			approver.ApproveReturns(nil)
-			revision.VerifyReturns(nil)
 			componentResolver.ResolveReturns(&apply.Component{Path: "alertmanager"}, nil)
 		})
-
-		approvedCommand := func() cdb.CommandObject {
-			raw, err := json.Marshal(map[string]any{
-				"id":            "abc",
-				"component":     "alertmanager",
-				"commit":        "aaa",
-				"action_sha256": apply.ActionHash(apply.StageProd, "alertmanager", "aaa"),
-			})
-			Expect(err).To(BeNil())
-			return commandObject(
-				base.Event{"path": "alertmanager", "approval": json.RawMessage(raw)},
-			)
-		}
 
 		newProdExecutor := func() cdb.CommandObjectExecutorTx {
 			return command.NewCommandObjectExecutorApply(
 				apply.StageProd,
 				componentResolver,
 				applier,
-				approver,
-				revision,
 				promotion.NewPromoter(
 					apply.StageProd,
 					gateway,
@@ -512,11 +385,16 @@ var _ = Describe("CommandObjectExecutorApply", func() {
 			)
 		}
 
-		It("applies an approved prod command and records no promotion", func() {
-			eventID, _, err := newProdExecutor().HandleCommand(ctx, nil, approvedCommand())
+		It("applies a prod command carrying no approval and records no promotion", func() {
+			eventID, _, err := newProdExecutor().HandleCommand(
+				ctx,
+				nil,
+				commandObject(base.Event{"path": "alertmanager"}),
+			)
 
 			Expect(err).To(BeNil())
 			Expect(eventID.String()).To(Equal("alertmanager"))
+			Expect(applier.ApplyCallCount()).To(Equal(1))
 			Expect(publisher.PublishCallCount()).To(Equal(0))
 			Expect(gateway.SendCallCount()).To(Equal(0))
 		})
@@ -524,7 +402,11 @@ var _ = Describe("CommandObjectExecutorApply", func() {
 		It("records no promotion when a prod apply fails", func() {
 			applier.ApplyReturns(errors.Errorf(ctx, "make exited 2"))
 
-			_, _, err := newProdExecutor().HandleCommand(ctx, nil, approvedCommand())
+			_, _, err := newProdExecutor().HandleCommand(
+				ctx,
+				nil,
+				commandObject(base.Event{"path": "alertmanager"}),
+			)
 
 			Expect(err).NotTo(BeNil())
 			Expect(publisher.PublishCallCount()).To(Equal(0))

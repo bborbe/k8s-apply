@@ -50,8 +50,6 @@ type application struct {
 	BatchSize           int               `required:"true"  arg:"batch-size"            env:"BATCH_SIZE"            usage:"batch consume size"                                                                                                      default:"1"`
 	DataDir             string            `required:"true"  arg:"datadir"               env:"DATADIR"               usage:"data directory"`
 	Stage               string            `required:"true"  arg:"stage"                 env:"STAGE"                 usage:"stage whose apply commands this instance consumes"                                                                       default:"dev"`
-	AttentionURL        string            `required:"false" arg:"attention-url"         env:"ATTENTION_URL"         usage:"attention store base URL, required on a stage that needs an approval"`
-	AttentionToken      string            `required:"false" arg:"attention-token"       env:"ATTENTION_TOKEN"       usage:"bearer token for the attention store's gated listener"                                                  display:"length"`
 	SunGatewayURL       string            `required:"false" arg:"sun-gateway-url"       env:"SUN_GATEWAY_URL"       usage:"sun command gateway base URL; required on dev, where a healthy apply promotes the component through it"`
 	SunGatewayInitiator string            `required:"false" arg:"sun-gateway-initiator" env:"SUN_GATEWAY_INITIATOR" usage:"initiator the sun command gateway attributes the promotion to"                                          display:"length"`
 	SunGatewayUser      string            `required:"false" arg:"sun-gateway-user"      env:"SUN_GATEWAY_USER"      usage:"user the sun command gateway authenticates the promotion as; required on dev"`
@@ -98,11 +96,6 @@ func (a *application) Run(ctx context.Context, sentryClient libsentry.Client) er
 	}
 	defer db.Close()
 
-	approver, err := a.createApprover(ctx, stage)
-	if err != nil {
-		return err
-	}
-
 	gateway, err := a.createGateway(ctx, stage)
 	if err != nil {
 		return err
@@ -121,7 +114,6 @@ func (a *application) Run(ctx context.Context, sentryClient libsentry.Client) er
 			db,
 			stage,
 			a.RepoDir,
-			approver,
 			deploymentClient,
 			a.HealthTimeout,
 			gateway,
@@ -129,32 +121,6 @@ func (a *application) Run(ctx context.Context, sentryClient libsentry.Client) er
 		a.createHTTPServer(sentryClient, db),
 	)
 
-}
-
-// createApprover picks the approver the stage demands.
-//
-// A stage that requires an approval and has no attention store URL configured
-// is a startup failure, not a runtime one: the alternative is a service that
-// accepts commands and refuses every one of them for a reason nobody sees until
-// the first real deploy.
-func (a *application) createApprover(
-	ctx context.Context,
-	stage apply.Stage,
-) (apply.Approver, error) {
-	if !stage.RequiresApproval() {
-		return apply.NewNoopApprover(), nil
-	}
-	if a.AttentionURL == "" {
-		return nil, errors.Errorf(
-			ctx,
-			"stage '%s' requires an approval but ATTENTION_URL is empty",
-			string(stage),
-		)
-	}
-	if err := validateCredentialURL(ctx, "ATTENTION_URL", a.AttentionURL); err != nil {
-		return nil, err
-	}
-	return apply.NewAttentionStoreApprover(a.AttentionURL, a.AttentionToken, time.Now), nil
 }
 
 // createGateway picks the promotion gateway the stage demands.
@@ -253,12 +219,10 @@ func (a *application) createDeploymentClient(ctx context.Context) (apply.Deploym
 // wire in clear text.
 //
 // Plain http is allowed only for an in-cluster Service address, where the
-// traffic never leaves the pod network — the prod store is a ClusterIP reached
-// over http, so refusing http outright would make the gate unusable. Anything
-// routable must be https.
+// traffic never leaves the pod network. Anything routable must be https.
 //
-// The rule is shared because both settings carry a credential: the attention
-// token in an Authorization header, and the sun gateway's initiator identity.
+// The rule exists because the setting carries a credential: the sun gateway's
+// initiator identity.
 func validateCredentialURL(ctx context.Context, setting string, raw string) error {
 	parsed, err := url.Parse(raw)
 	if err != nil {

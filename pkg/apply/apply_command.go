@@ -6,7 +6,6 @@ package apply
 
 import (
 	"context"
-	"encoding/json"
 	"path"
 	"strings"
 
@@ -16,18 +15,12 @@ import (
 // Command is the payload of an apply command published through the CQRS
 // command gateway. Path names one component of the nuke deploy repo, relative
 // to the repo root — for example "egress-proxy" or "trading/core/symbol".
+//
+// There is no approval field. The merge to the branch the apply pod clones is
+// the approval, and a stage applies only what it cloned — so a payload carries
+// no second gate it could assert for itself.
 type Command struct {
 	Path string `json:"path"`
-	// Approval is the operator approval this command carries. It is left raw
-	// rather than typed so that a payload carrying a *list* of approvals is
-	// refused by name ("more than one approval carried") instead of failing as
-	// a generic unmarshal error that names no cause. ParseApproval reads it.
-	//
-	// Absent on stages that need none, and on a stage that requires one it is
-	// what the Approver refuses — never something Validate rejects, because a
-	// missing approval is a policy refusal with a reason, not a malformed
-	// command.
-	Approval json.RawMessage `json:"approval,omitempty"`
 }
 
 // Validate rejects a command whose path could escape the repo root or is
