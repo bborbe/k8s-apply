@@ -12,7 +12,7 @@ jobs:
           PR_LABELS: ${{ toJson(github.event.pull_request.labels) }}
         run: |
           if echo "$PR_LABELS" | grep -q '"name":"do-not-merge"'; then
-            echo "::error::Merge blocked by the do-not-merge label"
+            echo "::error::Merge blocked by the do-not-merge label — blocks everyone except actors holding the Admin repository role and the Integration 3907226"
             exit 1
           fi
           echo "No do-not-merge label — merge allowed"
