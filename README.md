@@ -164,6 +164,26 @@ neutral, it reads as live.
 
 Multi-stage Docker build included. See `Dockerfile` and `Makefile.docker`.
 
+`make build` builds locally by default: it runs `docker build` against the local daemon and
+tags `docker.io/bborbe/k8s-apply:dev`, the tag `example.env` pins. Naming a cluster instead
+runs the same build as a Kubernetes Job inside that cluster:
+
+```bash
+make build BUILD_TARGET=sun REF=<sha> VERSION=<tag>
+```
+
+`REF` is the full 40-character commit to build and `VERSION` is the tag to publish. `VERSION`
+deliberately has no default — the arm refuses to invent a tag the built tree does not
+correspond to. The Job clones that ref, builds `linux/amd64` with BuildKit and pushes to
+Docker Hub.
+
+The private-registry copy the pods actually pull is produced afterwards by nuke's `mirror:`
+target in `bborbe/nuke`'s `k8s-apply/Makefile`, not by this build; run it once per stage
+before the first apply. A missed mirror is `ImagePullBackOff`, not an apply failure.
+
+`make upload` and `make clean` are no-ops for a cluster target: the Job already pushed, and
+no image is loaded on the local machine.
+
 ## Architecture
 
 A CQRS consumer with the standard bborbe service shell around it:
