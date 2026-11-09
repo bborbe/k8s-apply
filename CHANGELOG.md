@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 Please choose versions by [Semantic Versioning](http://semver.org/).
 
-## Unreleased
+## v0.20.0
 
 - feat: add a cluster build arm to `Makefile.docker` — `make build BUILD_TARGET=<cluster> REF=<sha> VERSION=<tag>` runs the same image build as a Kubernetes Job in that cluster and pushes to the same Docker Hub repository the local arm tags, while the default `make build` stays local and unchanged; `upload` and `clean` become no-ops for a cluster target
 
