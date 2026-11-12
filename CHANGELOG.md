@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 Please choose versions by [Semantic Versioning](http://semver.org/).
 
-## Unreleased
+## v0.21.0
 
 - feat: install `helmfile` (v1.8.3, checksum-pinned) and the `helm-diff` plugin in the apply image — ten nuke components declare `apply: helmfile -l stage=$(STAGE) apply` and every one of them failed at the first deploy with `/bin/sh: helmfile: not found`, so a third of the deploy surface was unreachable through the CQRS route
 
