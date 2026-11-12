@@ -86,6 +86,29 @@ COPY --from=gcr.io/go-containerregistry/crane:v0.22.1@sha256:1f968817b95790bed06
 # authors the Makefiles turns a working component into a broken one, so the
 # image pins the same release the operator runs.
 COPY --from=mikefarah/yq:4.54.1@sha256:4b3d9475d65571d28cbb19544d3820ec2945e4c8b2f18279394282b8dc3a592e /usr/bin/yq /usr/local/bin/yq
+
+# helmfile ships in the image for the same reason helm does, and its absence was
+# a measured outage rather than a theoretical gap: ten of nuke's components
+# declare `apply: helmfile -l stage=$(STAGE) apply`, and each one fails at the
+# first deploy with `/bin/sh: helmfile: not found` (2026-11-12,
+# github-update-go-watcher v0.9.1). The failure reads as a component defect, so
+# an image gap looked like ten broken components for as long as nobody deployed
+# one — the `agent` component applies through plain helm and kept working.
+#
+# Pinned to the release the operator runs (v1.8.3, 2026-11-12) for the reason the
+# yq note gives above: a version skew between the image and the machine that
+# authors the Makefiles turns a working component into a broken one. The tarball
+# is verified against a checksum recorded HERE, not one fetched alongside it —
+# the same argument the kubectl block makes.
+ARG HELMFILE_VERSION=1.8.3
+ARG HELMFILE_SHA256=7d79c6d2099a4819213873164eda23bdbd32f1404fec7a7104d934e5d102596f
+RUN curl -fsSL -o /tmp/helmfile.tgz \
+        "https://github.com/helmfile/helmfile/releases/download/v${HELMFILE_VERSION}/helmfile_${HELMFILE_VERSION}_linux_amd64.tar.gz" \
+ && echo "${HELMFILE_SHA256}  /tmp/helmfile.tgz" | sha256sum -c - \
+ && tar -xzf /tmp/helmfile.tgz -C /usr/local/bin helmfile \
+ && chmod 0755 /usr/local/bin/helmfile \
+ && rm -f /tmp/helmfile.tgz
+
 COPY --from=build /main /main
 COPY --from=build /usr/local/bin/teamvault-cli /usr/local/bin/teamvault-cli
 
@@ -102,6 +125,16 @@ RUN addgroup -g 10001 -S app \
  && adduser -u 10001 -S -G app -h /home/app app \
  && mkdir -p /data /repo \
  && chown 10001:10001 /data /repo
+
+# `helmfile apply` runs a diff before it syncs, and that diff is the helm-diff
+# plugin rather than part of the helmfile binary — helmfile alone still fails
+# every apply. Installed into a fixed path exported as HELM_PLUGINS so it does
+# not depend on HOME being set for the runtime user, and pinned to the operator's
+# version for the same skew reason as yq and helmfile.
+ARG HELM_DIFF_VERSION=3.15.10
+ENV HELM_PLUGINS=/home/app/.local/share/helm/plugins
+RUN helm plugin install https://github.com/databus23/helm-diff --version "v${HELM_DIFF_VERSION}" \
+ && chown -R 10001:10001 /home/app/.local/share/helm
 USER 10001:10001
 
 ENV BUILD_GIT_VERSION=${BUILD_GIT_VERSION}
