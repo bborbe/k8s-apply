@@ -1,6 +1,6 @@
 module github.com/bborbe/k8s-apply
 
-go 1.27.3
+go 1.27.4
 
 require (
 	github.com/IBM/sarama v1.61.1
