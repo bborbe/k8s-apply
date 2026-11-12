@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 Please choose versions by [Semantic Versioning](http://semver.org/).
 
+## Unreleased
+
+- chore: update github.com/bborbe/boltkv to v1.16.8, github.com/bborbe/cqrs to v0.6.16, github.com/bborbe/errors to v1.6.7, github.com/bborbe/http to v1.26.34, github.com/bborbe/kafka to v1.29.14, github.com/bborbe/kv to v1.21.30, github.com/bborbe/log to v1.7.9, github.com/bborbe/metrics to v0.6.12, github.com/bborbe/run to v1.11.11, github.com/bborbe/service to v1.11.3, github.com/bborbe/time to v1.27.28, github.com/onsi/ginkgo/v2 to v2.34.0, k8s.io/api to v0.38.0-beta.0, k8s.io/apimachinery to v0.38.0-beta.0, k8s.io/client-go to v0.38.0-beta.0
+
 ## v0.21.0
 
 - feat: install `helmfile` (v1.8.3, checksum-pinned) and the `helm-diff` plugin in the apply image — ten nuke components declare `apply: helmfile -l stage=$(STAGE) apply` and every one of them failed at the first deploy with `/bin/sh: helmfile: not found`, so a third of the deploy surface was unreachable through the CQRS route
