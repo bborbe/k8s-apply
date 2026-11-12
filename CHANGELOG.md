@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 Please choose versions by [Semantic Versioning](http://semver.org/).
 
+## Unreleased
+
+- feat: install `helmfile` (v1.8.3, checksum-pinned) and the `helm-diff` plugin in the apply image — ten nuke components declare `apply: helmfile -l stage=$(STAGE) apply` and every one of them failed at the first deploy with `/bin/sh: helmfile: not found`, so a third of the deploy surface was unreachable through the CQRS route
+
 ## v0.20.0
 
 - feat: add a cluster build arm to `Makefile.docker` — `make build BUILD_TARGET=<cluster> REF=<sha> VERSION=<tag>` runs the same image build as a Kubernetes Job in that cluster and pushes to the same Docker Hub repository the local arm tags, while the default `make build` stays local and unchanged; `upload` and `clean` become no-ops for a cluster target
