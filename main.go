@@ -118,7 +118,7 @@ func (a *application) Run(ctx context.Context, sentryClient libsentry.Client) er
 			a.HealthTimeout,
 			gateway,
 		),
-		a.createHTTPServer(sentryClient, db),
+		a.createHTTPServer(db),
 	)
 
 }
@@ -249,7 +249,6 @@ func validateCredentialURL(ctx context.Context, setting string, raw string) erro
 }
 
 func (a *application) createHTTPServer(
-	sentryClient libsentry.Client,
 	db libkv.DB,
 ) run.Func {
 	return func(ctx context.Context) error {
@@ -265,8 +264,6 @@ func (a *application) createHTTPServer(
 		router.Path("/setloglevel/{level}").
 			Handler(log.NewSetLoglevelHandler(ctx, log.NewLogLevelSetter(2, 5*time.Minute)))
 		router.Path("/gc").Handler(libhttp.NewGarbageCollectorHandler())
-		router.Path("/testloglevel").Handler(factory.CreateTestLoglevelHandler())
-		router.Path("/sentryalert").Handler(factory.CreateSentryAlertHandler(sentryClient))
 
 		glog.V(2).Infof("starting http server listen on %s", a.Listen)
 		return libhttp.NewServer(
