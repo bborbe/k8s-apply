@@ -16,7 +16,6 @@ import (
 
 	"github.com/bborbe/k8s-apply/pkg/apply"
 	"github.com/bborbe/k8s-apply/pkg/command"
-	"github.com/bborbe/k8s-apply/pkg/promotion"
 )
 
 // CQRSBranch is the branch whose topic prefix this stage consumes.
@@ -50,7 +49,6 @@ func CreateCommandConsumer(
 	repoDir string,
 	deploymentClient apply.DeploymentClient,
 	healthCheckTimeout time.Duration,
-	gateway promotion.Gateway,
 ) run.Func {
 	logSamplerFactory := log.DefaultSamplerFactory
 	applier := apply.NewHealthCheckedApplier(
@@ -59,18 +57,6 @@ func CreateCommandConsumer(
 		deploymentClient,
 		healthCheckTimeout,
 		5*time.Second,
-	)
-	// The prefix is the stage's own branch prefix, so on dev the record lands on
-	// develop-k8s-apply-v1-result — the same topic the existing result entries
-	// use.
-	promoter := promotion.NewPromoter(
-		stage,
-		gateway,
-		promotion.NewRecordPublisher(
-			syncProducer,
-			base.TopicPrefixFromBranch(stage.Branch()),
-		),
-		base.NewIdentifierGeneratorUUID[base.EventID](),
 	)
 	return cdb.RunCommandConsumerTxDefault(
 		saramaClientProvider,
@@ -84,7 +70,6 @@ func CreateCommandConsumer(
 				stage,
 				apply.NewComponentResolver(repoDir),
 				applier,
-				promoter,
 				logSamplerFactory,
 			),
 		},
