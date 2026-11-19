@@ -110,10 +110,6 @@ Configuration is managed through environment variables. See `example.env` for de
 | `BATCH_SIZE` | Kafka batch consume size | `1` |
 | `STAGE` | Stage whose apply commands this instance consumes (`dev` or `sun`) | `dev` |
 | `REPO_DIR` | Path to the deploy repo checkout the apply targets run in | `/repo` |
-| `SUN_GATEWAY_URL` | Sun command gateway base URL; required on `dev`, where a healthy apply promotes the component through it | (empty on `sun` and `prod`) |
-| `SUN_GATEWAY_INITIATOR` | Initiator the sun command gateway attributes the promotion to | (empty on `sun` and `prod`) |
-| `SUN_GATEWAY_USER` | User the sun command gateway authenticates the promotion as; required on `dev` | (empty on `sun` and `prod`) |
-| `SUN_GATEWAY_PASSWORD` | Password for that user; required on `dev` | (empty on `sun` and `prod`) |
 | `TEAMVAULT_URL` | TeamVault base URL, passed through to `teamvault-cli` | (from Secret) |
 | `TEAMVAULT_USER` | TeamVault user for this stage | (from Secret) |
 | `TEAMVAULT_PASS` | TeamVault password for this stage | (from Secret) |
@@ -208,6 +204,9 @@ POST /api/1.0/command/k8s-apply-v1/apply
 component's own target and never rewrites it. The stage decides the arguments: the `dev` stage runs
 `make -C <repo>/<path> BRANCH=dev apply`, while the `sun` stage passes no `BRANCH` at all
 (`make -C <repo>/<path> apply`), because sun's Makefiles select their environment unconditionally.
+
+One command applies one stage. A successful apply publishes its own result and issues no further
+command, so applying two stages means sending two commands — one to each stage's topic.
 
 Three refusals are by design and all publish a **Failure** result naming the reason:
 

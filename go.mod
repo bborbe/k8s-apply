@@ -3,7 +3,6 @@ module github.com/bborbe/k8s-apply
 go 1.27.4
 
 require (
-	github.com/IBM/sarama v1.61.1
 	github.com/bborbe/boltkv v1.16.8
 	github.com/bborbe/cqrs v0.6.16
 	github.com/bborbe/errors v1.6.7
@@ -28,6 +27,7 @@ require (
 )
 
 require (
+	github.com/IBM/sarama v1.61.1 // indirect
 	github.com/Masterminds/semver/v3 v3.5.0 // indirect
 	github.com/bborbe/argument/v2 v2.13.11 // indirect
 	github.com/bborbe/collection v1.21.7 // indirect
