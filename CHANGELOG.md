@@ -8,6 +8,10 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 
 - feat: remove the dev→sun auto-promotion — a successful apply on `dev` no longer posts a second apply command to the sun command gateway, so one apply command applies one stage and applying two stages means sending two commands. The `pkg/promotion` package, `Stage.Promotes()`, the `SUN_GATEWAY_*` settings and the `kind: promotion` records are all deleted; a `dev` instance now starts without sun credentials.
 
+## v0.22.0
+
+- refactor: remove the `/testloglevel` and `/sentryalert` debug HTTP endpoints, their `pkg/handler` files and the `pkg/factory` constructors, and drop the now-unused `libsentry` parameter from `createHTTPServer`
+
 ## v0.21.1
 
 - chore: update github.com/bborbe/boltkv to v1.16.8, github.com/bborbe/cqrs to v0.6.16, github.com/bborbe/errors to v1.6.7, github.com/bborbe/http to v1.26.34, github.com/bborbe/kafka to v1.29.14, github.com/bborbe/kv to v1.21.30, github.com/bborbe/log to v1.7.9, github.com/bborbe/metrics to v0.6.12, github.com/bborbe/run to v1.11.11, github.com/bborbe/service to v1.11.3, github.com/bborbe/time to v1.27.28, github.com/onsi/ginkgo/v2 to v2.34.0, k8s.io/api to v0.38.0-beta.0, k8s.io/apimachinery to v0.38.0-beta.0, k8s.io/client-go to v0.38.0-beta.0
