@@ -79,9 +79,9 @@ make precommit
 | `/readiness` | Readiness check |
 | `/metrics` | Prometheus metrics |
 | `/resetdb` | Database reset |
+| `/resetbucket/{BucketName}` | Bucket reset |
 | `/setloglevel/{level}` | Dynamic log level adjustment |
-| `/testloglevel` | Test logging at all levels |
-| `/sentryalert` | Test Sentry integration |
+| `/gc` | Garbage collection |
 
 ## Development Commands
 
