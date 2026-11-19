@@ -55,9 +55,8 @@ var _ = Describe("CommandObjectExecutorApply", func() {
 		Expect(executor.SendResultEnabled()).To(BeTrue())
 	})
 
-	// A successful apply publishes exactly one result and issues nothing else:
-	// the executor has no second command to send, so one applier call is the
-	// whole of what a dev apply does.
+	// A successful apply resolves the component, applies it once and publishes
+	// its own result.
 	It("applies the named component and returns its path as event id", func() {
 		component := &apply.Component{Path: "trading/core/symbol"}
 		componentResolver.ResolveReturns(component, nil)
@@ -156,8 +155,7 @@ var _ = Describe("CommandObjectExecutorApply", func() {
 		Expect(err.Error()).To(ContainSubstring("make exited 2"))
 	})
 
-	// Prod must not move: it applies a command carrying no approval at all, and
-	// the executor has no second stage to hand the component to.
+	// Prod applies a command carrying no approval at all.
 	It("applies a prod command carrying no approval", func() {
 		componentResolver.ResolveReturns(&apply.Component{Path: "alertmanager"}, nil)
 		prodExecutor := command.NewCommandObjectExecutorApply(

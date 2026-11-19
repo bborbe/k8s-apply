@@ -6,7 +6,7 @@ Please choose versions by [Semantic Versioning](http://semver.org/).
 
 ## Unreleased
 
-- refactor: remove the dev→sun auto-promotion — a successful apply on `dev` no longer posts a second apply command to the sun command gateway, so one apply command applies one stage and applying two stages means sending two commands. The `pkg/promotion` package, `Stage.Promotes()`, the `SUN_GATEWAY_*` settings and the `kind: promotion` records are all deleted; a `dev` instance now starts without sun credentials.
+- feat: remove the dev→sun auto-promotion — a successful apply on `dev` no longer posts a second apply command to the sun command gateway, so one apply command applies one stage and applying two stages means sending two commands. The `pkg/promotion` package, `Stage.Promotes()`, the `SUN_GATEWAY_*` settings and the `kind: promotion` records are all deleted; a `dev` instance now starts without sun credentials.
 
 ## v0.21.1
 
