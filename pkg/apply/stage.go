@@ -62,6 +62,25 @@ func (s Stage) Branch() base.Branch {
 	return base.Branch(s)
 }
 
+// TopicPrefix is the prefix prepended to the schema's topic names.
+//
+// The Seibert stages consume the UNPREFIXED names their Schema CR declares —
+// maintainer-kubeapply-v1-request, not develop-maintainer-kubeapply-v1-request —
+// because each stage has its own cluster and its own Kafka, so the branch prefix
+// is not what separates them. data/cdb-config's topics/maintainer.yaml declares
+// every maintainer topic unprefixed; a prefixed consumer would subscribe to a
+// topic nothing writes.
+//
+// `sun` keeps the branch-derived prefix it has always used.
+func (s Stage) TopicPrefix() base.TopicPrefix {
+	switch s {
+	case StageDev, StageProd:
+		return base.TopicPrefix("")
+	default:
+		return base.TopicPrefixFromBranch(s.Branch())
+	}
+}
+
 // RequiresMasterHead reports whether the deploy checkout's HEAD must contain
 // origin/master. This is the one method the dev|prod shape does not have; it is
 // how sun's checkout guard is expressed, because a sun apply must never run

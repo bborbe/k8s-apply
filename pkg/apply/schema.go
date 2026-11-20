@@ -7,10 +7,13 @@ package apply
 import "github.com/bborbe/cqrs/cdb"
 
 // SchemaID identifies the apply command schema. Its string form
-// "k8s-apply-v1" is the gateway path segment, and the branch prefix turns it
-// into the dev topics develop-k8s-apply-v1-{request,result,event,history}.
+// "maintainer-kubeapply-v1" is the gateway path segment.
+//
+// The Seibert stages consume this schema on the UNPREFIXED topics
+// maintainer-kubeapply-v1-{request,result,event,history}, which is what
+// data/cdb-config's topics/maintainer.yaml declares — see TopicPrefix below.
 var SchemaID = cdb.SchemaID{
-	Group:   "k8s",
-	Kind:    "apply",
+	Group:   "maintainer",
+	Kind:    "kubeapply",
 	Version: "v1",
 }
