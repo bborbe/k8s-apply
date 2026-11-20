@@ -67,6 +67,11 @@ func readFileWithIncludes(
 	}
 	visited[abs] = struct{}{}
 
+	// #nosec G703 -- the path is a make include directive read out of the
+	// deploy-repo checkout, which is the same trust domain as the Makefile that
+	// names it: make itself resolves that path and reads that file. The component
+	// directory was confined to repoDir by the resolver before this runs, and an
+	// include reaching outside it is the checkout's own content, not caller input.
 	content, err := os.ReadFile(abs)
 	if err != nil {
 		return "", errors.Wrapf(ctx, err, "read '%s' failed", abs)

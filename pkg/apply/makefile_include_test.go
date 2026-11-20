@@ -39,7 +39,10 @@ var _ = Describe("readMakefileWithIncludes", func() {
 	It("resolves an apply target that lives only in an included file", func() {
 		// The shape data/cdb-config uses: the component Makefile is nothing but
 		// includes, and the recipe is two directories up.
-		writeFn("schemas/cdb/Makefile", "include ../../Makefile.variables\ninclude ../../Makefile.env\ninclude ../../Makefile.k8s\n")
+		writeFn(
+			"schemas/cdb/Makefile",
+			"include ../../Makefile.variables\ninclude ../../Makefile.env\ninclude ../../Makefile.k8s\n",
+		)
 		writeFn("Makefile.variables", "ROOTDIR ?= $(shell pwd)\n")
 		writeFn("Makefile.env", "BRANCH ?= dev\n")
 		writeFn("Makefile.k8s", "apply:\n\tfind . -name \"*.yaml\" | kubectl apply -f -\n")
