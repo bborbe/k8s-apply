@@ -82,3 +82,18 @@ var _ = Describe("ParseStage", func() {
 		Entry("arbitrary", "bogus"),
 	)
 })
+
+var _ = Describe("Stage.TopicPrefix", func() {
+	It("consumes unprefixed topics on the Seibert stages", func() {
+		// data/cdb-config's topics/maintainer.yaml declares every maintainer topic
+		// unprefixed, and each stage has its own cluster and its own Kafka, so the
+		// branch prefix is not what separates them. A prefixed consumer would
+		// subscribe to a topic nothing writes.
+		Expect(string(apply.StageDev.TopicPrefix())).To(BeEmpty())
+		Expect(string(apply.StageProd.TopicPrefix())).To(BeEmpty())
+	})
+
+	It("keeps the branch-derived prefix on sun", func() {
+		Expect(string(apply.StageSun.TopicPrefix())).To(Equal("sun"))
+	})
+})
