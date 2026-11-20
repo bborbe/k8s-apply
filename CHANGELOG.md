@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 Please choose versions by [Semantic Versioning](http://semver.org/).
 
-## Unreleased
+## v0.25.0
 
 - feat: consume the `maintainer-kubeapply-v1` command schema instead of `k8s-apply-v1` — the Seibert instances are triggered by a CDB command through Weldall, and the schema is already registered with its own allowed-initiator list. `SchemaID` becomes `{Group: maintainer, Kind: kubeapply, Version: v1}`, and `Stage.TopicPrefix()` makes the topic prefix stage-dependent: `dev` and `prod` consume the **unprefixed** names their Schema CR declares (`maintainer-kubeapply-v1-request`), because each stage has its own cluster and its own Kafka, so the branch prefix is not what separates them — a prefixed consumer would subscribe to a topic nothing writes. `sun` keeps the branch-derived prefix unchanged. ⚠️ This repoints the schema for **every** stage of this binary, so a nuke instance bumped past this version must be migrated to the new schema and topics in the same change.
 
