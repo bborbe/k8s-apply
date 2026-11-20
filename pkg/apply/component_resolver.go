@@ -105,11 +105,15 @@ func (c *componentResolver) Resolve(ctx context.Context, path string) (*Componen
 	if !info.IsDir() {
 		return nil, errors.Errorf(ctx, "component '%s' is not a directory", path)
 	}
-	content, err := os.ReadFile(filepath.Join(dir, "Makefile"))
+	// A component Makefile may be nothing but `include` lines, with the apply
+	// target two directories up — data/cdb-config's schemas/cdb and schemas/raw
+	// are exactly that shape. Expand the chain before looking for the target, or
+	// a component make would apply is refused as "no apply target".
+	content, err := readMakefileWithIncludes(ctx, dir)
 	if err != nil {
-		return nil, errors.Wrapf(ctx, err, "component '%s' has no Makefile", path)
+		return nil, errors.Wrapf(ctx, err, "component '%s' has no resolvable Makefile", path)
 	}
-	recipe, found := extractRecipe(string(content))
+	recipe, found := extractRecipe(content)
 	if !found {
 		return nil, errors.Wrapf(ctx, ErrNotApplicable, "component '%s'", path)
 	}

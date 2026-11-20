@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 Please choose versions by [Semantic Versioning](http://semver.org/).
 
+## Unreleased
+
+- feat: resolve a component whose `apply:` target lives in an included Makefile — the resolver read only the component's own `Makefile`, so a component written as nothing but `include ../../Makefile.variables` / `.env` / `.k8s` was refused with `ErrNotApplicable` even though make itself would run its target. `include` and `-include` are now expanded recursively, paths resolved relative to the including file's directory as `make -C <dir>` does, bounded at depth 10 with a visited set so a cycle terminates; a `$(VAR)` path is left unresolved rather than guessed at, and a missing required include is an error while a missing `-include` is skipped. This is the shape `data/cdb-config` uses for `schemas/cdb` and `schemas/raw`.
+
 ## v0.23.0
 
 - feat: remove the dev→sun auto-promotion — a successful apply on `dev` no longer posts a second apply command to the sun command gateway, so one apply command applies one stage and applying two stages means sending two commands. The `pkg/promotion` package, `Stage.Promotes()`, the `SUN_GATEWAY_*` settings and the `kind: promotion` records are all deleted; a `dev` instance now starts without sun credentials.
