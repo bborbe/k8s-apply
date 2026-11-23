@@ -11,6 +11,7 @@ import (
 	"time"
 
 	libboltkv "github.com/bborbe/boltkv"
+	"github.com/bborbe/cqrs/base"
 	"github.com/bborbe/errors"
 	libhttp "github.com/bborbe/http"
 	libkafka "github.com/bborbe/kafka"
@@ -39,19 +40,22 @@ func main() {
 }
 
 type application struct {
-	SentryDSN       string            `required:"true"  arg:"sentry-dsn"        env:"SENTRY_DSN"        usage:"SentryDSN"                                                                                display:"length"`
-	SentryProxy     string            `required:"false" arg:"sentry-proxy"      env:"SENTRY_PROXY"      usage:"Sentry Proxy"`
-	Listen          string            `required:"true"  arg:"listen"            env:"LISTEN"            usage:"address to listen to"`
-	KafkaBrokers    string            `required:"true"  arg:"kafka-brokers"     env:"KAFKA_BROKERS"     usage:"Comma separated list of Kafka brokers"`
-	BatchSize       int               `required:"true"  arg:"batch-size"        env:"BATCH_SIZE"        usage:"batch consume size"                                                                                        default:"1"`
-	DataDir         string            `required:"true"  arg:"datadir"           env:"DATADIR"           usage:"data directory"`
-	Stage           string            `required:"true"  arg:"stage"             env:"STAGE"             usage:"stage whose apply commands this instance consumes"                                                         default:"dev"`
-	RepoDir         string            `required:"true"  arg:"repo-dir"          env:"REPO_DIR"          usage:"path to the deploy repo checkout this stage applies from"                                                  default:"/repo"`
-	Namespace       string            `required:"false" arg:"namespace"         env:"NAMESPACE"         usage:"namespace whose Deployments the post-apply health check reads; defaults to the pod's own"`
-	HealthTimeout   time.Duration     `required:"true"  arg:"health-timeout"    env:"HEALTH_TIMEOUT"    usage:"how long a Deployment may take to become healthy after an apply before it is rolled back"                  default:"5m"`
-	BuildGitVersion string            `required:"false" arg:"build-git-version" env:"BUILD_GIT_VERSION" usage:"Build Git version"                                                                                         default:"dev"`
-	BuildGitCommit  string            `required:"false" arg:"build-git-commit"  env:"BUILD_GIT_COMMIT"  usage:"Build Git commit hash"                                                                                     default:"none"`
-	BuildDate       *libtime.DateTime `required:"false" arg:"build-date"        env:"BUILD_DATE"        usage:"Build timestamp (RFC3339)"`
+	SentryDSN          string            `required:"true"  arg:"sentry-dsn"           env:"SENTRY_DSN"           usage:"SentryDSN"                                                                                  display:"length"`
+	SentryProxy        string            `required:"false" arg:"sentry-proxy"         env:"SENTRY_PROXY"         usage:"Sentry Proxy"`
+	Listen             string            `required:"true"  arg:"listen"               env:"LISTEN"               usage:"address to listen to"`
+	KafkaBrokers       string            `required:"true"  arg:"kafka-brokers"        env:"KAFKA_BROKERS"        usage:"Comma separated list of Kafka brokers"`
+	BatchSize          int               `required:"true"  arg:"batch-size"           env:"BATCH_SIZE"           usage:"batch consume size"                                                                                          default:"1"`
+	DataDir            string            `required:"true"  arg:"datadir"              env:"DATADIR"              usage:"data directory"`
+	Stage              string            `required:"true"  arg:"stage"                env:"STAGE"                usage:"stage whose apply commands this instance consumes; a label, any non-empty name is accepted"                  default:"dev"`
+	ApplyBranch        *string           `required:"false" arg:"apply-branch"         env:"APPLY_BRANCH"         usage:"override the branch passed to make as BRANCH; unset keeps the stage's built-in value"`
+	TopicPrefix        *string           `required:"false" arg:"topic-prefix"         env:"TOPIC_PREFIX"         usage:"override the Kafka topic prefix; unset keeps the stage's built-in value"`
+	RequiresMasterHead *bool             `required:"false" arg:"requires-master-head" env:"REQUIRES_MASTER_HEAD" usage:"override the master-head guard; unset keeps the stage's built-in value"`
+	RepoDir            string            `required:"true"  arg:"repo-dir"             env:"REPO_DIR"             usage:"path to the deploy repo checkout this stage applies from"                                                    default:"/repo"`
+	Namespace          string            `required:"false" arg:"namespace"            env:"NAMESPACE"            usage:"namespace whose Deployments the post-apply health check reads; defaults to the pod's own"`
+	HealthTimeout      time.Duration     `required:"true"  arg:"health-timeout"       env:"HEALTH_TIMEOUT"       usage:"how long a Deployment may take to become healthy after an apply before it is rolled back"                    default:"5m"`
+	BuildGitVersion    string            `required:"false" arg:"build-git-version"    env:"BUILD_GIT_VERSION"    usage:"Build Git version"                                                                                           default:"dev"`
+	BuildGitCommit     string            `required:"false" arg:"build-git-commit"     env:"BUILD_GIT_COMMIT"     usage:"Build Git commit hash"                                                                                       default:"none"`
+	BuildDate          *libtime.DateTime `required:"false" arg:"build-date"           env:"BUILD_DATE"           usage:"Build timestamp (RFC3339)"`
 }
 
 func (a *application) Run(ctx context.Context, sentryClient libsentry.Client) error {
@@ -59,6 +63,25 @@ func (a *application) Run(ctx context.Context, sentryClient libsentry.Client) er
 	if err != nil {
 		return errors.Wrap(ctx, err, "parse stage failed")
 	}
+	overrides := apply.StageOverrides{}
+	if a.ApplyBranch != nil {
+		overrides.ApplyBranch = a.ApplyBranch
+	}
+	if a.TopicPrefix != nil {
+		prefix := base.TopicPrefix(*a.TopicPrefix)
+		overrides.TopicPrefix = &prefix
+	}
+	if a.RequiresMasterHead != nil {
+		overrides.RequiresMasterHead = a.RequiresMasterHead
+	}
+	config := apply.ResolveStageConfig(stage, overrides)
+	glog.V(2).Infof(
+		"stage '%s' resolved: apply-branch '%s', topic-prefix '%s', requires-master-head %t",
+		string(stage),
+		config.ApplyBranch,
+		config.TopicPrefix.String(),
+		config.RequiresMasterHead,
+	)
 
 	libmetrics.NewBuildInfoMetrics().SetBuildInfo(a.BuildGitVersion, a.BuildGitCommit, a.BuildDate)
 
@@ -100,6 +123,7 @@ func (a *application) Run(ctx context.Context, sentryClient libsentry.Client) er
 			syncProducer,
 			db,
 			stage,
+			config,
 			a.RepoDir,
 			deploymentClient,
 			a.HealthTimeout,

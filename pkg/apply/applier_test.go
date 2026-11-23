@@ -19,7 +19,9 @@ var _ = Describe("makeArgs", func() {
 	It("passes BRANCH for the dev stage", func() {
 		component := &Component{Path: "egress", Dir: "/repo/egress"}
 
-		Expect(makeArgs(component, StageDev)).To(Equal([]string{
+		Expect(
+			makeArgs(component, ResolveStageConfig(StageDev, StageOverrides{})),
+		).To(Equal([]string{
 			"-C", "/repo/egress", "BRANCH=dev", "apply",
 		}))
 	})
@@ -31,7 +33,9 @@ var _ = Describe("makeArgs", func() {
 	It("targets the prod branch as master", func() {
 		component := &Component{Path: "egress", Dir: "/repo/egress"}
 
-		Expect(makeArgs(component, StageProd)).To(Equal([]string{
+		Expect(
+			makeArgs(component, ResolveStageConfig(StageProd, StageOverrides{})),
+		).To(Equal([]string{
 			"-C", "/repo/egress", "BRANCH=master", "apply",
 		}))
 	})
@@ -39,25 +43,40 @@ var _ = Describe("makeArgs", func() {
 	It("passes no BRANCH for the sun stage", func() {
 		component := &Component{Path: "agent", Dir: "/repo/agent"}
 
-		Expect(makeArgs(component, StageSun)).To(Equal([]string{
+		Expect(
+			makeArgs(component, ResolveStageConfig(StageSun, StageOverrides{})),
+		).To(Equal([]string{
 			"-C", "/repo/agent", "apply",
 		}))
 	})
 })
 
 var _ = Describe("Applier", func() {
-	It("refuses an unknown stage", func() {
-		applier := NewApplier(Stage("bogus"), log.DefaultSamplerFactory)
-		component := &Component{Path: "egress", Dir: "/repo/egress"}
+	// A stage name is a label, not a gate: an unknown name is accepted and runs
+	// with the neutral config. This is the behaviour the closed enum used to
+	// refuse.
+	It("accepts an unknown stage and runs it with the neutral config", func() {
+		component := &Component{Path: "absent", Dir: "/does/not/exist"}
+		applier := NewApplier(
+			Stage("octopus-eu"),
+			ResolveStageConfig(Stage("octopus-eu"), StageOverrides{}),
+			log.DefaultSamplerFactory,
+		)
 
 		err := applier.Apply(context.Background(), component)
 
+		// It fails on the missing directory, not on the stage name.
 		Expect(err).NotTo(BeNil())
-		Expect(err.Error()).To(ContainSubstring("unknown stage 'bogus'"))
+		Expect(err.Error()).To(ContainSubstring("apply 'absent' failed"))
+		Expect(err.Error()).NotTo(ContainSubstring("unknown stage"))
 	})
 
 	It("reports a missing component directory as a failure rather than a success", func() {
-		applier := NewApplier(StageDev, log.DefaultSamplerFactory)
+		applier := NewApplier(
+			StageDev,
+			ResolveStageConfig(StageDev, StageOverrides{}),
+			log.DefaultSamplerFactory,
+		)
 		component := &Component{Path: "absent", Dir: "/does/not/exist"}
 
 		err := applier.Apply(context.Background(), component)
@@ -84,7 +103,11 @@ var _ = Describe("Applier", func() {
 		Expect(err).To(BeNil())
 		Expect(component).NotTo(BeNil())
 
-		applier := NewApplier(StageDev, log.DefaultSamplerFactory)
+		applier := NewApplier(
+			StageDev,
+			ResolveStageConfig(StageDev, StageOverrides{}),
+			log.DefaultSamplerFactory,
+		)
 		Expect(applier.Apply(ctx, component)).To(BeNil())
 
 		_, statErr := os.Stat(filepath.Join(componentDir, "sentinel"))
