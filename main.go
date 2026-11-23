@@ -7,6 +7,7 @@ package main
 import (
 	"context"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -34,6 +35,11 @@ import (
 
 const serviceName = "k8s-apply"
 
+// overrideUnset is the sentinel an unset override carries: the arg/env parser
+// has no nullable field type, so "keep the built-in value" is spelled as a
+// value no real override would use.
+const overrideUnset = "-"
+
 func main() {
 	app := &application{}
 	os.Exit(service.Main(context.Background(), app, &app.SentryDSN, &app.SentryProxy))
@@ -47,9 +53,9 @@ type application struct {
 	BatchSize          int               `required:"true"  arg:"batch-size"           env:"BATCH_SIZE"           usage:"batch consume size"                                                                                          default:"1"`
 	DataDir            string            `required:"true"  arg:"datadir"              env:"DATADIR"              usage:"data directory"`
 	Stage              string            `required:"true"  arg:"stage"                env:"STAGE"                usage:"stage whose apply commands this instance consumes; a label, any non-empty name is accepted"                  default:"dev"`
-	ApplyBranch        *string           `required:"false" arg:"apply-branch"         env:"APPLY_BRANCH"         usage:"override the branch passed to make as BRANCH; unset keeps the stage's built-in value"`
-	TopicPrefix        *string           `required:"false" arg:"topic-prefix"         env:"TOPIC_PREFIX"         usage:"override the Kafka topic prefix; unset keeps the stage's built-in value"`
-	RequiresMasterHead *bool             `required:"false" arg:"requires-master-head" env:"REQUIRES_MASTER_HEAD" usage:"override the master-head guard; unset keeps the stage's built-in value"`
+	ApplyBranch        string            `required:"false" arg:"apply-branch"         env:"APPLY_BRANCH"         usage:"override the branch passed to make as BRANCH; '-' keeps the stage's built-in value"         default:"-"`
+	TopicPrefix        string            `required:"false" arg:"topic-prefix"         env:"TOPIC_PREFIX"         usage:"override the Kafka topic prefix; '-' keeps the stage's built-in value"                          default:"-"`
+	RequiresMasterHead string            `required:"false" arg:"requires-master-head" env:"REQUIRES_MASTER_HEAD" usage:"override the master-head guard (true|false); '-' keeps the stage's built-in value"            default:"-"`
 	RepoDir            string            `required:"true"  arg:"repo-dir"             env:"REPO_DIR"             usage:"path to the deploy repo checkout this stage applies from"                                                    default:"/repo"`
 	Namespace          string            `required:"false" arg:"namespace"            env:"NAMESPACE"            usage:"namespace whose Deployments the post-apply health check reads; defaults to the pod's own"`
 	HealthTimeout      time.Duration     `required:"true"  arg:"health-timeout"       env:"HEALTH_TIMEOUT"       usage:"how long a Deployment may take to become healthy after an apply before it is rolled back"                    default:"5m"`
@@ -64,15 +70,22 @@ func (a *application) Run(ctx context.Context, sentryClient libsentry.Client) er
 		return errors.Wrap(ctx, err, "parse stage failed")
 	}
 	overrides := apply.StageOverrides{}
-	if a.ApplyBranch != nil {
-		overrides.ApplyBranch = a.ApplyBranch
+	// The arg/env parser does not support pointer fields, so each override is a
+	// string whose sentinel default "-" means "keep the stage's built-in value".
+	if a.ApplyBranch != overrideUnset {
+		value := a.ApplyBranch
+		overrides.ApplyBranch = &value
 	}
-	if a.TopicPrefix != nil {
-		prefix := base.TopicPrefix(*a.TopicPrefix)
+	if a.TopicPrefix != overrideUnset {
+		prefix := base.TopicPrefix(a.TopicPrefix)
 		overrides.TopicPrefix = &prefix
 	}
-	if a.RequiresMasterHead != nil {
-		overrides.RequiresMasterHead = a.RequiresMasterHead
+	if a.RequiresMasterHead != overrideUnset {
+		value, err := strconv.ParseBool(a.RequiresMasterHead)
+		if err != nil {
+			return errors.Wrapf(ctx, err, "parse requires-master-head '%s'", a.RequiresMasterHead)
+		}
+		overrides.RequiresMasterHead = &value
 	}
 	config := apply.ResolveStageConfig(stage, overrides)
 	glog.V(2).Infof(
