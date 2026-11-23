@@ -24,42 +24,40 @@ type Applier interface {
 }
 
 // NewApplier returns an Applier that shells out to the component's own make
-// target for the given stage. It never rewrites the recipe: whatever the
-// component's Makefile says `apply` does is what runs.
+// target for the given stage and config. It never rewrites the recipe: whatever
+// the component's Makefile says `apply` does is what runs.
 //
-// The stage, not a bare branch string, is the parameter: the branch handed to
-// make and the branch whose topics this instance consumes are different facts,
-// and only a stage knows both.
-func NewApplier(stage Stage, logSamplerFactory log.SamplerFactory) Applier {
+// The stage is kept for the log line that names which instance ran an apply;
+// every behavioural decision reads config, never the name.
+func NewApplier(stage Stage, config StageConfig, logSamplerFactory log.SamplerFactory) Applier {
 	return &applier{
 		stage:      stage,
+		config:     config,
 		logSampler: logSamplerFactory.Sampler(),
 	}
 }
 
 type applier struct {
 	stage      Stage
+	config     StageConfig
 	logSampler log.Sampler
 }
 
 // makeArgs is the exact argv the applier hands to make. It is a named function
 // so the invocation is assertable in a test without running make.
 //
-// A stage that gates by a precondition inside its own recipes passes no BRANCH
+// A config that gates by a precondition inside its own recipes passes no BRANCH
 // at all — passing one there would assert a gate that stage does not use.
-func makeArgs(component *Component, stage Stage) []string {
+func makeArgs(component *Component, config StageConfig) []string {
 	args := []string{"-C", component.Dir}
-	if stage.RequiresBranchArgument() {
-		args = append(args, "BRANCH="+stage.ApplyBranch())
+	if config.RequiresBranchArgument() {
+		args = append(args, "BRANCH="+config.ApplyBranch)
 	}
 	return append(args, applyTarget)
 }
 
 func (a *applier) Apply(ctx context.Context, component *Component) error {
-	if _, err := ParseStage(ctx, string(a.stage)); err != nil {
-		return errors.Wrapf(ctx, err, "refusing to apply component '%s'", component.Path)
-	}
-	if a.stage.RequiresMasterHead() {
+	if a.config.RequiresMasterHead {
 		if err := guardMaster(ctx, component); err != nil {
 			return errors.Wrapf(
 				ctx,
@@ -69,7 +67,7 @@ func (a *applier) Apply(ctx context.Context, component *Component) error {
 			)
 		}
 	}
-	args := makeArgs(component, a.stage)
+	args := makeArgs(component, a.config)
 	// #nosec G204 -- the component path was validated by the resolver and make
 	// is the documented entry point of every component in the deploy repo.
 	cmd := exec.CommandContext(ctx, "make", args...)

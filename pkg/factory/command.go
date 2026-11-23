@@ -7,7 +7,6 @@ package factory
 import (
 	"time"
 
-	"github.com/bborbe/cqrs/base"
 	"github.com/bborbe/cqrs/cdb"
 	libkafka "github.com/bborbe/kafka"
 	libkv "github.com/bborbe/kv"
@@ -17,20 +16,6 @@ import (
 	"github.com/bborbe/k8s-apply/pkg/apply"
 	"github.com/bborbe/k8s-apply/pkg/command"
 )
-
-// CQRSBranch is the branch whose topic prefix this stage consumes.
-//
-// It is deliberately NOT the make branch. On prod the make branch is "master"
-// while the cqrs branch is "prod", and TopicPrefixFromBranch maps those two
-// different inputs onto the same prefix — which is exactly why they must stay
-// separate values: the day one of them changes, a single shared variable would
-// silently consume a topic nothing writes.
-func CQRSBranch(stage apply.Stage) base.Branch {
-	if stage == apply.StageProd {
-		return base.Branch("prod")
-	}
-	return base.Branch(string(stage))
-}
 
 // CreateCommandConsumer consumes apply commands from the branch-scoped request
 // topic and publishes one result per command.
@@ -46,13 +31,14 @@ func CreateCommandConsumer(
 	syncProducer libkafka.SyncProducer,
 	db libkv.DB,
 	stage apply.Stage,
+	config apply.StageConfig,
 	repoDir string,
 	deploymentClient apply.DeploymentClient,
 	healthCheckTimeout time.Duration,
 ) run.Func {
 	logSamplerFactory := log.DefaultSamplerFactory
 	applier := apply.NewHealthCheckedApplier(
-		apply.NewApplier(stage, logSamplerFactory),
+		apply.NewApplier(stage, config, logSamplerFactory),
 		apply.NewDeploymentFinder(),
 		deploymentClient,
 		healthCheckTimeout,
@@ -63,7 +49,7 @@ func CreateCommandConsumer(
 		syncProducer,
 		db,
 		apply.SchemaID,
-		stage.TopicPrefix(),
+		config.TopicPrefix,
 		false,
 		cdb.CommandObjectExecutorTxs{
 			command.NewCommandObjectExecutorApply(

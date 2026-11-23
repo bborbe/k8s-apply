@@ -12,28 +12,38 @@ import (
 	"github.com/bborbe/k8s-apply/pkg/apply"
 )
 
-var _ = Describe("Stage topic prefix", func() {
-	// The cqrs branch is NOT the make branch. On prod they are "prod" and
-	// "master" respectively, and only the cqrs one is what
-	// TopicPrefixFromBranch expects. Handing it "master" would still yield the
-	// right prefix today, which is exactly why a wrong mapping here would stay
-	// hidden until either value changed.
-	It("maps prod to the cqrs branch 'prod', whose topic prefix is master", func() {
-		Expect(apply.StageProd.Branch()).To(Equal(base.Branch("prod")))
-		Expect(base.TopicPrefixFromBranch(apply.StageProd.Branch())).
-			To(Equal(base.TopicPrefix("master")))
+var _ = Describe("Stage config", func() {
+	// The make branch and the topic prefix are separate config values, and the
+	// configured prefix is deliberately NOT the branch-derived one: the Seibert
+	// stages consume the unprefixed topic their Schema CR declares, because each
+	// stage has its own cluster and its own Kafka. Collapsing the two would stay
+	// hidden until one of them changed — so assert they differ.
+	It("keeps the make branch and the topic prefix separate on prod", func() {
+		config := apply.ResolveStageConfig(apply.StageProd, apply.StageOverrides{})
+
+		Expect(config.ApplyBranch).To(Equal("master"))
+		Expect(string(config.TopicPrefix)).To(BeEmpty())
+		Expect(base.TopicPrefixFromBranch(base.Branch(config.ApplyBranch))).
+			To(Equal(base.TopicPrefix("master")),
+				"a branch-derived prefix would be 'master' — the configured one is empty")
 	})
 
-	It("maps dev to the cqrs branch 'dev', whose topic prefix is develop", func() {
-		Expect(apply.StageDev.Branch()).To(Equal(base.Branch("dev")))
-		Expect(base.TopicPrefixFromBranch(apply.StageDev.Branch())).
-			To(Equal(base.TopicPrefix("develop")))
+	It("keeps the make branch and the topic prefix separate on dev", func() {
+		config := apply.ResolveStageConfig(apply.StageDev, apply.StageOverrides{})
+
+		Expect(config.ApplyBranch).To(Equal("dev"))
+		Expect(string(config.TopicPrefix)).To(BeEmpty())
+		Expect(base.TopicPrefixFromBranch(base.Branch(config.ApplyBranch))).
+			To(Equal(base.TopicPrefix("develop")),
+				"a branch-derived prefix would be 'develop' — the configured one is empty")
 	})
 
-	// The make branch and the cqrs branch differ on prod; asserting it here is
-	// what stops someone collapsing them back into one variable.
-	It("differs from the stage's make branch on prod", func() {
-		Expect(string(apply.StageProd.Branch())).NotTo(Equal(apply.StageProd.ApplyBranch()))
-		Expect(apply.StageProd.ApplyBranch()).To(Equal("master"))
+	// sun is the stage that does keep a branch-derived prefix; it is now an
+	// explicit config value rather than a fall-through.
+	It("keeps sun on its branch-derived prefix", func() {
+		config := apply.ResolveStageConfig(apply.StageSun, apply.StageOverrides{})
+
+		Expect(config.ApplyBranch).To(BeEmpty())
+		Expect(string(config.TopicPrefix)).To(Equal("sun"))
 	})
 })
