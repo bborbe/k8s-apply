@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 Please choose versions by [Semantic Versioning](http://semver.org/).
 
-## Unreleased
+## v0.26.1
 
 - fix: the stage overrides parse again — `v0.26.0` declared `ApplyBranch`, `TopicPrefix` and `RequiresMasterHead` as `*string` / `*bool` so an unset override could be distinguished from an explicit empty value, but the arg/env parser rejects pointer fields outright (`parse app failed: field ApplyBranch with type *string is unsupported`), so **every** instance of `v0.26.0` failed at startup regardless of its config. A `v0.26.0` pod crash-looped on dev and the apply service was down until rolled back. Each override is now a `string` whose sentinel default `-` means "keep the stage's built-in value"; `REQUIRES_MASTER_HEAD` parses `true` / `false` and rejects anything else by name. An explicit empty override is no longer expressible, which costs nothing: `sun`'s built-in branch is already empty.
 
