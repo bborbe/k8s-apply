@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 Please choose versions by [Semantic Versioning](http://semver.org/).
 
-## Unreleased
+## v0.26.0
 
 - feat: accept any stage name instead of a closed `dev`/`sun`/`prod` enum — `ParseStage` refused every other name with `unknown stage '<name>': accepted are 'dev', 'sun', 'prod'`, so a cluster that did not exist yet could not be named without a code change and a release. A stage name is now a label: the behaviours it used to select (make branch, topic prefix, master-head guard) are a `StageConfig` resolved from a built-in per-stage default table plus `APPLY_BRANCH` / `TOPIC_PREFIX` / `REQUIRES_MASTER_HEAD` overrides. `dev`, `sun` and `prod` resolve byte-identically, so no existing deployment needs an env change. An unconfigured unknown stage gets the neutral config — no `BRANCH` argument, no topic prefix, no master-head guard — so it consumes the same unprefixed `maintainer-kubeapply-v1-request` as `dev`, and two such instances must not share a cluster. `CQRSBranch` is deleted: it was never called, and it selected on the stage name.
 
