@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 Please choose versions by [Semantic Versioning](http://semver.org/).
 
-## Unreleased
+## v0.26.2
 
 - chore: remove stale vulnerability ignore IDs that no longer apply (govulncheck, trivy)
 - fix: install Trivy from a pinned, checksum-verified release tarball instead of the apt-repo route that needed the removed `apt-key` helper
