@@ -38,7 +38,7 @@ func CreateCommandConsumer(
 ) run.Func {
 	logSamplerFactory := log.DefaultSamplerFactory
 	applier := apply.NewHealthCheckedApplier(
-		apply.NewApplier(stage, config, logSamplerFactory),
+		apply.NewApplier(stage, config, repoDir, logSamplerFactory),
 		apply.NewDeploymentFinder(),
 		deploymentClient,
 		healthCheckTimeout,

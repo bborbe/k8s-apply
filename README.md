@@ -110,6 +110,7 @@ Configuration is managed through environment variables. See `example.env` for de
 | `BATCH_SIZE` | Kafka batch consume size | `1` |
 | `STAGE` | Stage whose apply commands this instance consumes (`dev` or `sun`) | `dev` |
 | `REPO_DIR` | Path to the deploy repo checkout the apply targets run in | `/repo` |
+| `REFRESH_CHECKOUT` | Move `REPO_DIR` to the tip of the apply branch before each apply (`true`/`false`); needs a writable `REPO_DIR` and git credentials in this container | per stage — on for `dev` |
 | `TEAMVAULT_URL` | TeamVault base URL, passed through to `teamvault-cli` | (from Secret) |
 | `TEAMVAULT_USER` | TeamVault user for this stage | (from Secret) |
 | `TEAMVAULT_PASS` | TeamVault password for this stage | (from Secret) |

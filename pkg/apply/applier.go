@@ -27,12 +27,22 @@ type Applier interface {
 // target for the given stage and config. It never rewrites the recipe: whatever
 // the component's Makefile says `apply` does is what runs.
 //
+// repoDir is the deploy repo checkout the component paths are resolved against.
+// It is the same directory the resolver is rooted at, and it is what a config
+// with RefreshCheckout moves to the tip of its branch before an apply.
+//
 // The stage is kept for the log line that names which instance ran an apply;
 // every behavioural decision reads config, never the name.
-func NewApplier(stage Stage, config StageConfig, logSamplerFactory log.SamplerFactory) Applier {
+func NewApplier(
+	stage Stage,
+	config StageConfig,
+	repoDir string,
+	logSamplerFactory log.SamplerFactory,
+) Applier {
 	return &applier{
 		stage:      stage,
 		config:     config,
+		repoDir:    repoDir,
 		logSampler: logSamplerFactory.Sampler(),
 	}
 }
@@ -40,6 +50,7 @@ func NewApplier(stage Stage, config StageConfig, logSamplerFactory log.SamplerFa
 type applier struct {
 	stage      Stage
 	config     StageConfig
+	repoDir    string
 	logSampler log.Sampler
 }
 
@@ -57,6 +68,23 @@ func makeArgs(component *Component, config StageConfig) []string {
 }
 
 func (a *applier) Apply(ctx context.Context, component *Component) error {
+	if a.config.RefreshCheckout {
+		head, err := refreshCheckout(ctx, a.repoDir, a.config.ApplyBranch)
+		if err != nil {
+			return errors.Wrapf(
+				ctx,
+				err,
+				"refresh checkout for component '%s'",
+				component.Path,
+			)
+		}
+		// The line SC1 and SC3 read: it names the revision the apply below runs
+		// from, so a stale checkout is visible in the log instead of only in the
+		// cluster. It is emitted only when the checkout was refreshed — on the
+		// stages that do not refresh, HEAD is the pod-start clone and a separate
+		// git invocation per apply would buy nothing.
+		glog.Infof("apply %s: checkout HEAD %s", component.Path, head)
+	}
 	if a.config.RequiresMasterHead {
 		if err := guardMaster(ctx, component); err != nil {
 			return errors.Wrapf(
@@ -134,4 +162,92 @@ func guardMaster(ctx context.Context, component *Component) error {
 		)
 	}
 	return nil
+}
+
+// checkoutRefreshTimeout bounds the network half of a refresh. It is longer
+// than guardMaster's 10s because that fetch is best-effort and this one decides
+// whether the apply runs at all.
+const checkoutRefreshTimeout = 60 * time.Second
+
+// refreshCheckout moves the deploy repo checkout to the tip of branch and
+// returns the commit the apply will run from.
+//
+// Every failure is returned, never swallowed. guardMaster's best-effort fetch
+// is the shape that made this defect invisible: it logs a failed fetch at V(2)
+// and then applies whatever the checkout already held, so the apply reports
+// success against a revision nobody chose. A refresh that failed must fail the
+// apply instead — the result topic then carries the fetch failure and nothing is
+// applied.
+func refreshCheckout(ctx context.Context, repoDir string, branch string) (string, error) {
+	if branch == "" {
+		return "", errors.Errorf(
+			ctx,
+			"refresh checkout needs an apply branch, and this stage resolves none",
+		)
+	}
+	fetchCtx, cancel := context.WithTimeout(ctx, checkoutRefreshTimeout)
+	defer cancel()
+
+	if output, err := runGit(fetchCtx, repoDir, "fetch", "-q", "origin", branch); err != nil {
+		return "", errors.Wrapf(
+			ctx,
+			err,
+			"fetch origin %s: %s",
+			branch,
+			strings.TrimSpace(output),
+		)
+	}
+	// reset --hard, not merge: the checkout is a disposable clone of a deploy
+	// repo, so anything local is meaningless and a merge would leave conflict
+	// markers for make to render.
+	if output, err := runGit(ctx, repoDir, "reset", "--hard", "-q", "origin/"+branch); err != nil {
+		return "", errors.Wrapf(
+			ctx,
+			err,
+			"reset to origin/%s: %s",
+			branch,
+			strings.TrimSpace(output),
+		)
+	}
+	return checkoutHead(ctx, repoDir)
+}
+
+// checkoutHead returns the commit the deploy checkout sits on.
+func checkoutHead(ctx context.Context, repoDir string) (string, error) {
+	output, err := runGit(ctx, repoDir, "rev-parse", "HEAD")
+	if err != nil {
+		return "", errors.Wrapf(ctx, err, "rev-parse HEAD: %s", strings.TrimSpace(output))
+	}
+	return strings.TrimSpace(output), nil
+}
+
+// runGit runs one git command in repoDir and returns its combined output.
+//
+// GIT_SSH_COMMAND is inherited when the deployment sets it, because the deploy
+// key lives on a read-only mount whose path only the manifest knows. BatchMode
+// and a connect timeout are added either way: a fetch that waits on a
+// passphrase prompt or an unroutable host would hold the apply open until the
+// context deadline instead of failing by name.
+func runGit(ctx context.Context, repoDir string, args ...string) (string, error) {
+	gitArgs := append([]string{"-C", repoDir}, args...)
+	// #nosec G204 -- repoDir is REPO_DIR, validated by the resolver before any
+	// component is applied, and git is the documented tool for this checkout.
+	cmd := exec.CommandContext(ctx, "git", gitArgs...)
+	cmd.Env = append(os.Environ(), gitSSHEnvironment()...)
+	output, err := cmd.CombinedOutput()
+	return string(output), err
+}
+
+// gitSSHEnvironment returns the GIT_SSH_COMMAND override runGit applies, or nil
+// when the deployment's own value already forbids interaction.
+func gitSSHEnvironment() []string {
+	const batchMode = "-o BatchMode=yes -o ConnectTimeout=5"
+	command := os.Getenv("GIT_SSH_COMMAND")
+	if command == "" {
+		return []string{"GIT_SSH_COMMAND=ssh " + batchMode}
+	}
+	if strings.Contains(command, "BatchMode") {
+		return nil
+	}
+	return []string{"GIT_SSH_COMMAND=" + command + " " + batchMode}
 }
