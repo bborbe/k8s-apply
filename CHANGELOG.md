@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 Please choose versions by [Semantic Versioning](http://semver.org/).
 
-## Unreleased
+## v0.27.1
 
 - fix: refresh the deploy checkout to the branch the **checkout** is on, not the value passed to make as `BRANCH`. `v0.27.0` fetched and reset to `origin/<ApplyBranch>`, which is a different question: nuke's dev instance clones `master` and passes `BRANCH=dev` so the tree's own `Makefile.env` selects `dev.env`, so the refresh asked a master clone for `origin/dev` and died `fatal: ambiguous argument 'origin/dev': unknown revision`. Because a refresh failure is fatal, that failed **every** dev apply on the stage — including the one that would have deployed the fix — and the deployment had to be rolled back to `v0.26.1`. The refresh now resolves the branch with `git rev-parse --abbrev-ref HEAD` and refuses a detached HEAD by name rather than following whatever `FETCH_HEAD` holds.
 
