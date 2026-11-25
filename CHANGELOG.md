@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 Please choose versions by [Semantic Versioning](http://semver.org/).
 
+## Unreleased
+
+- fix: refresh the deploy checkout to the branch the **checkout** is on, not the value passed to make as `BRANCH`. `v0.27.0` fetched and reset to `origin/<ApplyBranch>`, which is a different question: nuke's dev instance clones `master` and passes `BRANCH=dev` so the tree's own `Makefile.env` selects `dev.env`, so the refresh asked a master clone for `origin/dev` and died `fatal: ambiguous argument 'origin/dev': unknown revision`. Because a refresh failure is fatal, that failed **every** dev apply on the stage — including the one that would have deployed the fix — and the deployment had to be rolled back to `v0.26.1`. The refresh now resolves the branch with `git rev-parse --abbrev-ref HEAD` and refuses a detached HEAD by name rather than following whatever `FETCH_HEAD` holds.
+
 ## v0.27.0
 
 - fix: a dev apply now refreshes its deploy checkout instead of running the clone the pod started with. The init container clones once, and nothing moved the checkout afterwards — `guardMaster`'s fetch runs only on `sun` and is best-effort, so a commit pushed after pod start was invisible to every dev apply until the pod was restarted, and the apply reported success against the stale revision. `StageConfig.RefreshCheckout` (on for `dev`, off for `sun` and `prod`) now runs `git fetch origin <branch>` + `git reset --hard origin/<branch>` before the apply, logs `apply <component>: checkout HEAD <sha>`, and **fails the apply** on a fetch or reset error rather than applying the stale tree. `REFRESH_CHECKOUT` overrides the per-stage default. An instance that turns it on needs a writable `REPO_DIR` and the deploy key mounted in the **service** container — the key currently exists only in the init container.

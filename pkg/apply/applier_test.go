@@ -130,7 +130,7 @@ var _ = Describe("Applier", func() {
 	// apply until the pod restarts — and the apply then reports success against
 	// the stale revision.
 	It("moves a stale checkout to the origin branch tip before applying", func() {
-		_, upstream, repoDir := seedClonedDeployRepo()
+		_, upstream, repoDir := seedClonedDeployRepo("dev")
 
 		Expect(os.WriteFile(
 			filepath.Join(upstream, "agent", "new-image.txt"),
@@ -162,6 +162,43 @@ var _ = Describe("Applier", func() {
 		Expect(gitOutput(repoDir, "show", "HEAD:agent/new-image.txt")).To(Equal("v2"))
 	})
 
+	// The nuke dev instance clones `master` and passes BRANCH=dev, so
+	// ApplyBranch and the checkout's branch are different values. Refreshing to
+	// origin/dev asked a master clone for a ref it does not have —
+	// `fatal: ambiguous argument 'origin/dev'` — and, because a refresh failure
+	// is fatal, that failed every apply on the stage. The refresh must follow the
+	// branch the checkout is actually on.
+	It("refreshes the checkout's own branch, not the make branch", func() {
+		_, upstream, repoDir := seedClonedDeployRepo("master")
+
+		Expect(os.WriteFile(
+			filepath.Join(upstream, "agent", "after-clone.txt"),
+			[]byte("v2"),
+			0o600,
+		)).To(BeNil())
+		commitAll(upstream, "after clone")
+		gitRun(upstream, "push", "origin", "master")
+		want := gitOutput(upstream, "rev-parse", "HEAD")
+
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		component, err := NewComponentResolver(repoDir).Resolve(ctx, "agent")
+		Expect(err).To(BeNil())
+
+		// StageDev resolves ApplyBranch "dev" — the make branch — while this
+		// checkout is on master. That is the exact pairing that broke.
+		applier := NewApplier(
+			StageDev,
+			ResolveStageConfig(StageDev, StageOverrides{}),
+			repoDir,
+			log.DefaultSamplerFactory,
+		)
+		Expect(applier.Apply(ctx, component)).To(BeNil())
+
+		Expect(gitOutput(repoDir, "rev-parse", "HEAD")).To(Equal(want))
+	})
+
 	// A best-effort fetch is what made the defect invisible: the apply ran on
 	// whatever the checkout held and reported success. The fetch failure must
 	// fail the apply instead, so the result topic carries it and nothing is
@@ -169,8 +206,12 @@ var _ = Describe("Applier", func() {
 	It("fails the apply when the checkout fetch fails instead of applying the stale tree", func() {
 		repoDir := GinkgoT().TempDir()
 		gitRun(repoDir, "init", "--initial-branch=dev")
-		gitRun(repoDir, "remote", "add", "origin", filepath.Join(repoDir, "no-such-origin.git"))
 		writeApplyMakefile(repoDir)
+		// A commit first: the refresh resolves the checkout's branch, and an
+		// unborn HEAD has none to resolve — the failure would name HEAD instead
+		// of the fetch this test is about.
+		commitAll(repoDir, "initial")
+		gitRun(repoDir, "remote", "add", "origin", filepath.Join(repoDir, "no-such-origin.git"))
 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -197,19 +238,19 @@ var _ = Describe("Applier", func() {
 // component, clones it the way the pod's init container does (shallow, one
 // branch), and returns the origin path, the upstream working clone and the
 // pod-style clone.
-func seedClonedDeployRepo() (string, string, string) {
+func seedClonedDeployRepo(branch string) (string, string, string) {
 	GinkgoHelper()
 	origin := filepath.Join(GinkgoT().TempDir(), "origin.git")
 	upstream := GinkgoT().TempDir()
-	gitRun(upstream, "init", "--initial-branch=dev")
+	gitRun(upstream, "init", "--initial-branch="+branch)
 	writeApplyMakefile(upstream)
 	commitAll(upstream, "initial")
 	gitRun(upstream, "init", "--bare", origin)
 	gitRun(upstream, "remote", "add", "origin", origin)
-	gitRun(upstream, "push", "origin", "dev")
+	gitRun(upstream, "push", "origin", branch)
 
 	repoDir := GinkgoT().TempDir()
-	gitRun(upstream, "clone", "--depth", "1", "--branch", "dev", "file://"+origin, repoDir)
+	gitRun(upstream, "clone", "--depth", "1", "--branch", branch, "file://"+origin, repoDir)
 	return origin, upstream, repoDir
 }
 
