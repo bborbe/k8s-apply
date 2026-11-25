@@ -25,21 +25,26 @@ var _ = Describe("Stage", func() {
 			applyBranch string,
 			requiresBranchArgument bool,
 			requiresMasterHead bool,
+			refreshCheckout bool,
 			topicPrefix base.TopicPrefix,
 		) {
 			config := apply.ResolveStageConfig(stage, apply.StageOverrides{})
 			Expect(config.ApplyBranch).To(Equal(applyBranch))
 			Expect(config.RequiresBranchArgument()).To(Equal(requiresBranchArgument))
 			Expect(config.RequiresMasterHead).To(Equal(requiresMasterHead))
+			Expect(config.RefreshCheckout).To(Equal(refreshCheckout))
 			Expect(config.TopicPrefix).To(Equal(topicPrefix))
 		},
-		Entry("dev", apply.StageDev, "dev", true, false, base.TopicPrefix("")),
-		Entry("sun", apply.StageSun, "", false, true, base.TopicPrefix("sun")),
+		// dev is the only stage that refreshes: its clone is made once by the
+		// pod's init container and nothing else moves it, so an apply pushed
+		// after pod start would otherwise run the stale tree.
+		Entry("dev", apply.StageDev, "dev", true, false, true, base.TopicPrefix("")),
+		Entry("sun", apply.StageSun, "", false, true, false, base.TopicPrefix("sun")),
 		// prod applies master while consuming the unprefixed topic. ApplyBranch
 		// is what make receives; TopicPrefix is what selects the topic. They are
 		// separate config values, and collapsing them would stay hidden until one
 		// of them changed.
-		Entry("prod", apply.StageProd, "master", true, false, base.TopicPrefix("")),
+		Entry("prod", apply.StageProd, "master", true, false, false, base.TopicPrefix("")),
 	)
 
 	// A stage name outside the three built-ins is accepted and resolves to the
@@ -51,6 +56,7 @@ var _ = Describe("Stage", func() {
 			Expect(config.ApplyBranch).To(BeEmpty())
 			Expect(config.RequiresBranchArgument()).To(BeFalse())
 			Expect(config.RequiresMasterHead).To(BeFalse())
+			Expect(config.RefreshCheckout).To(BeFalse())
 			Expect(string(config.TopicPrefix)).To(BeEmpty())
 		},
 		Entry("octopus-eu", "octopus-eu"),
@@ -64,7 +70,11 @@ var _ = Describe("Stage", func() {
 		Entry("dev with a non-default branch",
 			apply.StageDev,
 			apply.StageOverrides{ApplyBranch: ptrString("feature-x")},
-			apply.StageConfig{ApplyBranch: "feature-x", TopicPrefix: base.TopicPrefix("")},
+			apply.StageConfig{
+				ApplyBranch:     "feature-x",
+				TopicPrefix:     base.TopicPrefix(""),
+				RefreshCheckout: true,
+			},
 		),
 		Entry("sun with a master-head guard switched off",
 			apply.StageSun,
@@ -77,11 +87,13 @@ var _ = Describe("Stage", func() {
 				ApplyBranch:        ptrString("master"),
 				TopicPrefix:        ptrTopicPrefix("octopus"),
 				RequiresMasterHead: ptrBool(true),
+				RefreshCheckout:    ptrBool(true),
 			},
 			apply.StageConfig{
 				ApplyBranch:        "master",
 				TopicPrefix:        base.TopicPrefix("octopus"),
 				RequiresMasterHead: true,
+				RefreshCheckout:    true,
 			},
 		),
 	)

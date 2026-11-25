@@ -52,6 +52,19 @@ type StageConfig struct {
 	// not have; it is how sun's checkout guard is expressed, because a sun
 	// apply must never run from a feature worktree.
 	RequiresMasterHead bool
+	// RefreshCheckout reports whether every apply first moves the deploy
+	// checkout to the tip of ApplyBranch.
+	//
+	// The checkout is cloned once by the pod's init container, so without a
+	// refresh a commit pushed after pod start is invisible to every apply until
+	// the pod is restarted — and the apply then reports success on the stale
+	// revision. That is the silent-wrong-success shape this removes on dev.
+	//
+	// It is off by default, and on for dev only: prod keeps its current
+	// behaviour deliberately (a separate change), and sun already guards its
+	// checkout through RequiresMasterHead. A refresh needs a writable REPO_DIR
+	// and git credentials, so an instance that turns it on must mount both.
+	RefreshCheckout bool
 }
 
 // RequiresBranchArgument reports whether ApplyBranch is passed to make. It is
@@ -69,6 +82,7 @@ type StageOverrides struct {
 	ApplyBranch        *string
 	TopicPrefix        *base.TopicPrefix
 	RequiresMasterHead *bool
+	RefreshCheckout    *bool
 }
 
 // defaultStageConfigs returns the built-in behaviour for the three stages that
@@ -86,6 +100,7 @@ func defaultStageConfigs() map[Stage]StageConfig {
 			ApplyBranch:        "dev",
 			TopicPrefix:        base.TopicPrefix(""),
 			RequiresMasterHead: false,
+			RefreshCheckout:    true,
 		},
 		StageSun: {
 			ApplyBranch:        "",
@@ -115,6 +130,9 @@ func ResolveStageConfig(stage Stage, overrides StageOverrides) StageConfig {
 	}
 	if overrides.RequiresMasterHead != nil {
 		config.RequiresMasterHead = *overrides.RequiresMasterHead
+	}
+	if overrides.RefreshCheckout != nil {
+		config.RefreshCheckout = *overrides.RefreshCheckout
 	}
 	return config
 }

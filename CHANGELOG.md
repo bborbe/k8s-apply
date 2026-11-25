@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 Please choose versions by [Semantic Versioning](http://semver.org/).
 
+## Unreleased
+
+- fix: a dev apply now refreshes its deploy checkout instead of running the clone the pod started with. The init container clones once, and nothing moved the checkout afterwards — `guardMaster`'s fetch runs only on `sun` and is best-effort, so a commit pushed after pod start was invisible to every dev apply until the pod was restarted, and the apply reported success against the stale revision. `StageConfig.RefreshCheckout` (on for `dev`, off for `sun` and `prod`) now runs `git fetch origin <branch>` + `git reset --hard origin/<branch>` before the apply, logs `apply <component>: checkout HEAD <sha>`, and **fails the apply** on a fetch or reset error rather than applying the stale tree. `REFRESH_CHECKOUT` overrides the per-stage default. An instance that turns it on needs a writable `REPO_DIR` and the deploy key mounted in the **service** container — the key currently exists only in the init container.
+
 ## v0.26.2
 
 - chore: remove stale vulnerability ignore IDs that no longer apply (govulncheck, trivy)

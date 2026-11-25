@@ -53,9 +53,10 @@ type application struct {
 	BatchSize          int               `required:"true"  arg:"batch-size"           env:"BATCH_SIZE"           usage:"batch consume size"                                                                                          default:"1"`
 	DataDir            string            `required:"true"  arg:"datadir"              env:"DATADIR"              usage:"data directory"`
 	Stage              string            `required:"true"  arg:"stage"                env:"STAGE"                usage:"stage whose apply commands this instance consumes; a label, any non-empty name is accepted"                  default:"dev"`
-	ApplyBranch        string            `required:"false" arg:"apply-branch"         env:"APPLY_BRANCH"         usage:"override the branch passed to make as BRANCH; '-' keeps the stage's built-in value"         default:"-"`
-	TopicPrefix        string            `required:"false" arg:"topic-prefix"         env:"TOPIC_PREFIX"         usage:"override the Kafka topic prefix; '-' keeps the stage's built-in value"                          default:"-"`
-	RequiresMasterHead string            `required:"false" arg:"requires-master-head" env:"REQUIRES_MASTER_HEAD" usage:"override the master-head guard (true|false); '-' keeps the stage's built-in value"            default:"-"`
+	ApplyBranch        string            `required:"false" arg:"apply-branch"         env:"APPLY_BRANCH"         usage:"override the branch passed to make as BRANCH; '-' keeps the stage's built-in value"                          default:"-"`
+	TopicPrefix        string            `required:"false" arg:"topic-prefix"         env:"TOPIC_PREFIX"         usage:"override the Kafka topic prefix; '-' keeps the stage's built-in value"                                       default:"-"`
+	RequiresMasterHead string            `required:"false" arg:"requires-master-head" env:"REQUIRES_MASTER_HEAD" usage:"override the master-head guard (true|false); '-' keeps the stage's built-in value"                           default:"-"`
+	RefreshCheckout    string            `required:"false" arg:"refresh-checkout"     env:"REFRESH_CHECKOUT"     usage:"override the pre-apply checkout refresh (true|false); '-' keeps the stage's built-in value"                  default:"-"`
 	RepoDir            string            `required:"true"  arg:"repo-dir"             env:"REPO_DIR"             usage:"path to the deploy repo checkout this stage applies from"                                                    default:"/repo"`
 	Namespace          string            `required:"false" arg:"namespace"            env:"NAMESPACE"            usage:"namespace whose Deployments the post-apply health check reads; defaults to the pod's own"`
 	HealthTimeout      time.Duration     `required:"true"  arg:"health-timeout"       env:"HEALTH_TIMEOUT"       usage:"how long a Deployment may take to become healthy after an apply before it is rolled back"                    default:"5m"`
@@ -69,32 +70,10 @@ func (a *application) Run(ctx context.Context, sentryClient libsentry.Client) er
 	if err != nil {
 		return errors.Wrap(ctx, err, "parse stage failed")
 	}
-	overrides := apply.StageOverrides{}
-	// The arg/env parser does not support pointer fields, so each override is a
-	// string whose sentinel default "-" means "keep the stage's built-in value".
-	if a.ApplyBranch != overrideUnset {
-		value := a.ApplyBranch
-		overrides.ApplyBranch = &value
+	config, err := a.stageConfig(ctx, stage)
+	if err != nil {
+		return err
 	}
-	if a.TopicPrefix != overrideUnset {
-		prefix := base.TopicPrefix(a.TopicPrefix)
-		overrides.TopicPrefix = &prefix
-	}
-	if a.RequiresMasterHead != overrideUnset {
-		value, err := strconv.ParseBool(a.RequiresMasterHead)
-		if err != nil {
-			return errors.Wrapf(ctx, err, "parse requires-master-head '%s'", a.RequiresMasterHead)
-		}
-		overrides.RequiresMasterHead = &value
-	}
-	config := apply.ResolveStageConfig(stage, overrides)
-	glog.V(2).Infof(
-		"stage '%s' resolved: apply-branch '%s', topic-prefix '%s', requires-master-head %t",
-		string(stage),
-		config.ApplyBranch,
-		config.TopicPrefix.String(),
-		config.RequiresMasterHead,
-	)
 
 	libmetrics.NewBuildInfoMetrics().SetBuildInfo(a.BuildGitVersion, a.BuildGitCommit, a.BuildDate)
 
@@ -144,6 +123,60 @@ func (a *application) Run(ctx context.Context, sentryClient libsentry.Client) er
 		a.createHTTPServer(db),
 	)
 
+}
+
+// stageConfig resolves the behaviour this instance runs with: the stage's
+// built-in defaults with every override the deploy set applied on top.
+//
+// The arg/env parser does not support pointer fields, so each override is a
+// string whose sentinel default "-" means "keep the stage's built-in value".
+func (a *application) stageConfig(
+	ctx context.Context,
+	stage apply.Stage,
+) (apply.StageConfig, error) {
+	overrides := apply.StageOverrides{}
+	if a.ApplyBranch != overrideUnset {
+		value := a.ApplyBranch
+		overrides.ApplyBranch = &value
+	}
+	if a.TopicPrefix != overrideUnset {
+		prefix := base.TopicPrefix(a.TopicPrefix)
+		overrides.TopicPrefix = &prefix
+	}
+	if a.RequiresMasterHead != overrideUnset {
+		value, err := strconv.ParseBool(a.RequiresMasterHead)
+		if err != nil {
+			return apply.StageConfig{}, errors.Wrapf(
+				ctx,
+				err,
+				"parse requires-master-head '%s'",
+				a.RequiresMasterHead,
+			)
+		}
+		overrides.RequiresMasterHead = &value
+	}
+	if a.RefreshCheckout != overrideUnset {
+		value, err := strconv.ParseBool(a.RefreshCheckout)
+		if err != nil {
+			return apply.StageConfig{}, errors.Wrapf(
+				ctx,
+				err,
+				"parse refresh-checkout '%s'",
+				a.RefreshCheckout,
+			)
+		}
+		overrides.RefreshCheckout = &value
+	}
+	config := apply.ResolveStageConfig(stage, overrides)
+	glog.V(2).Infof(
+		"stage '%s' resolved: apply-branch '%s', topic-prefix '%s', requires-master-head %t, refresh-checkout %t",
+		string(stage),
+		config.ApplyBranch,
+		config.TopicPrefix.String(),
+		config.RequiresMasterHead,
+		config.RefreshCheckout,
+	)
+	return config, nil
 }
 
 // serviceAccountNamespaceFile is where every in-cluster pod finds its own
