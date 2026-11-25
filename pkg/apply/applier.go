@@ -69,7 +69,7 @@ func makeArgs(component *Component, config StageConfig) []string {
 
 func (a *applier) Apply(ctx context.Context, component *Component) error {
 	if a.config.RefreshCheckout {
-		head, err := refreshCheckout(ctx, a.repoDir, a.config.ApplyBranch)
+		head, err := refreshCheckout(ctx, a.repoDir)
 		if err != nil {
 			return errors.Wrapf(
 				ctx,
@@ -169,8 +169,15 @@ func guardMaster(ctx context.Context, component *Component) error {
 // whether the apply runs at all.
 const checkoutRefreshTimeout = 60 * time.Second
 
-// refreshCheckout moves the deploy repo checkout to the tip of branch and
-// returns the commit the apply will run from.
+// refreshCheckout moves the deploy repo checkout to the tip of the branch it is
+// checked out on and returns the commit the apply will run from.
+//
+// It follows the CHECKOUT's branch, never ApplyBranch. ApplyBranch is the value
+// handed to make as BRANCH, and it selects a stage's env file inside the tree:
+// nuke's dev instance clones `master` and passes BRANCH=dev. Refreshing to
+// origin/dev would ask a master clone for a ref it does not have —
+// `fatal: ambiguous argument 'origin/dev'` — and, because a refresh failure is
+// fatal, that fails every apply on the stage.
 //
 // Every failure is returned, never swallowed. guardMaster's best-effort fetch
 // is the shape that made this defect invisible: it logs a failed fetch at V(2)
@@ -178,12 +185,10 @@ const checkoutRefreshTimeout = 60 * time.Second
 // success against a revision nobody chose. A refresh that failed must fail the
 // apply instead — the result topic then carries the fetch failure and nothing is
 // applied.
-func refreshCheckout(ctx context.Context, repoDir string, branch string) (string, error) {
-	if branch == "" {
-		return "", errors.Errorf(
-			ctx,
-			"refresh checkout needs an apply branch, and this stage resolves none",
-		)
+func refreshCheckout(ctx context.Context, repoDir string) (string, error) {
+	branch, err := checkoutBranch(ctx, repoDir)
+	if err != nil {
+		return "", err
 	}
 	fetchCtx, cancel := context.WithTimeout(ctx, checkoutRefreshTimeout)
 	defer cancel()
@@ -210,6 +215,30 @@ func refreshCheckout(ctx context.Context, repoDir string, branch string) (string
 		)
 	}
 	return checkoutHead(ctx, repoDir)
+}
+
+// checkoutBranch returns the branch the deploy checkout is on. A detached HEAD
+// is refused by name rather than refreshed to whatever FETCH_HEAD happens to
+// hold — a deploy that silently follows the wrong revision is the failure mode
+// this whole path exists to remove.
+func checkoutBranch(ctx context.Context, repoDir string) (string, error) {
+	output, err := runGit(ctx, repoDir, "rev-parse", "--abbrev-ref", "HEAD")
+	if err != nil {
+		return "", errors.Wrapf(
+			ctx,
+			err,
+			"resolve checkout branch: %s",
+			strings.TrimSpace(output),
+		)
+	}
+	branch := strings.TrimSpace(output)
+	if branch == "" || branch == "HEAD" {
+		return "", errors.Errorf(
+			ctx,
+			"deploy checkout is on a detached HEAD; refresh needs a branch to follow",
+		)
+	}
+	return branch, nil
 }
 
 // checkoutHead returns the commit the deploy checkout sits on.

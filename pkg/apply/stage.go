@@ -53,7 +53,12 @@ type StageConfig struct {
 	// apply must never run from a feature worktree.
 	RequiresMasterHead bool
 	// RefreshCheckout reports whether every apply first moves the deploy
-	// checkout to the tip of ApplyBranch.
+	// checkout to the tip of the branch it is checked out on.
+	//
+	// It follows the checkout's own branch, not ApplyBranch: ApplyBranch is the
+	// value handed to make as BRANCH and selects a stage's env file inside the
+	// tree (nuke's dev instance clones master and passes BRANCH=dev), so the two
+	// are different questions and must not be conflated.
 	//
 	// The checkout is cloned once by the pod's init container, so without a
 	// refresh a commit pushed after pod start is invisible to every apply until
