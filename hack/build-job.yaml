@@ -58,7 +58,7 @@ spec:
               git -C /src fetch -q --depth=1 --tags origin "$2"
               git -C /src checkout -q --detach FETCH_HEAD
               git -C /src log -1 --format=%ct > /meta/source-date-epoch
-              git -C /src log -1 --format=%cI > /meta/source-date-iso
+              date -u +%Y-%m-%dT%H:%M:%SZ > /meta/source-date-iso
               git -C /src rev-parse --short HEAD > /meta/git-commit
               git -C /src describe --tags --always --dirty > /meta/git-version
               echo "cloned $1 at $2: $(git -C /src rev-parse HEAD) epoch=$(cat /meta/source-date-epoch) version=$(cat /meta/git-version)"
