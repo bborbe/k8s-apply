@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 Please choose versions by [Semantic Versioning](http://semver.org/).
 
+## Unreleased
+
+- chore: update github.com/bborbe/boltkv to v1.17.1, github.com/bborbe/cqrs to v0.6.18, github.com/bborbe/errors to v1.7.1, github.com/bborbe/http to v1.28.1, github.com/bborbe/kafka to v1.30.4, github.com/bborbe/kv to v1.21.31, github.com/bborbe/log to v1.7.10, github.com/bborbe/metrics to v0.6.15, github.com/bborbe/run to v1.13.0, github.com/bborbe/sentry to v1.11.1, github.com/bborbe/service to v1.12.2, github.com/bborbe/time to v1.27.30
+
 ## v0.27.1
 
 - fix: refresh the deploy checkout to the branch the **checkout** is on, not the value passed to make as `BRANCH`. `v0.27.0` fetched and reset to `origin/<ApplyBranch>`, which is a different question: nuke's dev instance clones `master` and passes `BRANCH=dev` so the tree's own `Makefile.env` selects `dev.env`, so the refresh asked a master clone for `origin/dev` and died `fatal: ambiguous argument 'origin/dev': unknown revision`. Because a refresh failure is fatal, that failed **every** dev apply on the stage — including the one that would have deployed the fix — and the deployment had to be rolled back to `v0.26.1`. The refresh now resolves the branch with `git rev-parse --abbrev-ref HEAD` and refuses a detached HEAD by name rather than following whatever `FETCH_HEAD` holds.
